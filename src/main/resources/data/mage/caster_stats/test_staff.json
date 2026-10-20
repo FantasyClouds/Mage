@@ -14,7 +14,7 @@
   "slowCooldown": 20,
   "isOverwrite": true,
   "sequence": [
-    { "type": "antigravity" },
+    { "type": "antigravity", "visual": "lethality:acidic_slash" },
     { "type": "split", "count": 3, "spread": 40 }
   ]
 }

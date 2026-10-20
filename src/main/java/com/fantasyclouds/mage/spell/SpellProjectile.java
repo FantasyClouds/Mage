@@ -34,6 +34,8 @@ public class SpellProjectile {
     public double angleOffset;
     /** 穿透数：>0 时弹穿墙不消失、每实体只结算一次，命中 count 个后消失（PierceStep 累加）。 */
     public int pierceCount;
+    /** 视觉委托：目标实体注册名（如 lethality:acidic_slash）。非空时客户端渲染改为委托该实体的 Renderer——模型/动画照搬，兼容任意模组实体。空/查不到 → 默认 billboard。 */
+    public String visual = "";
 
     public SpellProjectile(String projectileType, double damage, int ballType, double speed, int lifetime) {
         this(projectileType, damage, ballType, speed, lifetime, true, 0.0);
@@ -56,6 +58,7 @@ public class SpellProjectile {
     public SpellProjectile copy() {
         SpellProjectile p = new SpellProjectile(projectileType, damage, ballType, speed, lifetime, antigravity, angleOffset);
         p.pierceCount = this.pierceCount;
+        p.visual = this.visual;
         return p;
     }
 
@@ -81,6 +84,7 @@ public class SpellProjectile {
         if (entity instanceof SpellBolt bolt) {
             bolt.launch(motion, antigravity);
             bolt.setSpellType(ballType);
+            if (visual != null && !visual.isEmpty()) bolt.setSpellVisual(visual);
         } else {
             entity.setDeltaMovement(motion);
         }
@@ -90,6 +94,7 @@ public class SpellProjectile {
         tag.putInt("spell_type", ballType);
         tag.putLong("spell_death_time", level.getGameTime() + lifetime);
         if (pierceCount > 0) tag.putInt("spell_pierce", pierceCount);
+        if (visual != null && !visual.isEmpty()) tag.putString("spell_visual", visual);
         int forceful = ctx.held.getEnchantmentLevel(MageEnchantments.FORCEFUL.get());
         if (forceful > 0) tag.putDouble("spell_enchant_bonus", forceful);
         if (ctx.held.getEnchantmentLevel(MageEnchantments.BURST.get()) > 0) tag.putBoolean("spell_enchant_burst", true);

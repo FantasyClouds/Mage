@@ -29,6 +29,7 @@ public class ProjectileStep implements SpellStep {
     private final double speed;
     private final int lifetime;
     private final boolean antigravity;
+    private final String visual;
 
     public double damage() { return damage; }
     public int ballType() { return ballType; }
@@ -36,6 +37,7 @@ public class ProjectileStep implements SpellStep {
     public int lifetime() { return lifetime; }
     public String projectileType() { return projectileType; }
     public boolean antigravity() { return antigravity; }
+    public String visual() { return visual; }
 
     public ProjectileStep(JsonObject json) {
         this(json, StepDefaults.EMPTY, true); // 单参构造（旧折叠）默认 antigravity（保持旧行为=直线）
@@ -53,10 +55,13 @@ public class ProjectileStep implements SpellStep {
         this.speed = json.has("speed") ? json.get("speed").getAsDouble() : defs.getSpeedOr(2.0);
         this.lifetime = json.has("lifetime") ? json.get("lifetime").getAsInt() : defs.getLifetimeOr(60);
         this.antigravity = antigravity;
+        this.visual = json.has("visual") ? json.get("visual").getAsString() : "";
     }
 
     @Override
     public void apply(CastContext ctx) {
-        ctx.addProjectile(new SpellProjectile(projectileType, damage, ballType, speed, lifetime, antigravity, 0.0));
+        SpellProjectile p = new SpellProjectile(projectileType, damage, ballType, speed, lifetime, antigravity, 0.0);
+        p.visual = visual;
+        ctx.addProjectile(p);
     }
 }

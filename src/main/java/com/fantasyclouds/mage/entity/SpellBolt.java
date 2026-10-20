@@ -30,6 +30,8 @@ public class SpellBolt extends AbstractHurtingProjectile {
 
     private static final EntityDataAccessor<Integer> DATA_SPELL_TYPE =
             SynchedEntityData.defineId(SpellBolt.class, EntityDataSerializers.INT);
+    private static final EntityDataAccessor<String> DATA_SPELL_VISUAL =
+            SynchedEntityData.defineId(SpellBolt.class, EntityDataSerializers.STRING);
 
     /** 无重力（直线）？默认 true，对应 antigravity 原语（当前主流法术）。projectile 原语为 false 走重力抛物线。 */
     private boolean antigravity = true;
@@ -66,10 +68,20 @@ public class SpellBolt extends AbstractHurtingProjectile {
         return this.entityData.get(DATA_SPELL_TYPE);
     }
 
+    /** 视觉委托：目标实体注册名（同步到客户端供渲染器使用）；空 = 默认 billboard。 */
+    public void setSpellVisual(String visual) {
+        this.entityData.set(DATA_SPELL_VISUAL, visual == null ? "" : visual);
+    }
+
+    public String getSpellVisual() {
+        return this.entityData.get(DATA_SPELL_VISUAL);
+    }
+
     @Override
     protected void defineSynchedData() {
         super.defineSynchedData();
         this.entityData.define(DATA_SPELL_TYPE, 0);
+        this.entityData.define(DATA_SPELL_VISUAL, "");
     }
 
     private boolean isPiercing() {
