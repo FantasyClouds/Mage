@@ -43,6 +43,13 @@ public class SyncCasterStatsPacket {
             buf.writeInt(s.slowCooldown());
             buf.writeBoolean(s.isOverwrite());
             buf.writeInt(s.lifetime());
+            // 伤害组（HUD「NxM」显示源）随包同步；客户端 sequence 空表只需这个
+            java.util.List<com.fantasyclouds.mage.spell.DamageGroup> groups = s.damageGroups();
+            buf.writeVarInt(groups.size());
+            for (com.fantasyclouds.mage.spell.DamageGroup g : groups) {
+                buf.writeDouble(g.perDamage());
+                buf.writeVarInt(g.count());
+            }
         }
     }
 
@@ -63,9 +70,14 @@ public class SyncCasterStatsPacket {
             int slowCooldown = buf.readInt();
             boolean isOverwrite = buf.readBoolean();
             int lifetime = buf.readInt();
-            // sequence 是服务端发射依据，客户端无需可执行步骤（HUD 只读顶层字段）→ 空表。
+            // sequence 是服务端发射依据，客户端无需可执行步骤 → 空表；伤害组同步过来了供 HUD。
+            int groupCount = buf.readVarInt();
+            java.util.List<com.fantasyclouds.mage.spell.DamageGroup> groups = new java.util.ArrayList<>(groupCount);
+            for (int gi = 0; gi < groupCount; gi++) {
+                groups.add(new com.fantasyclouds.mage.spell.DamageGroup(buf.readDouble(), buf.readVarInt()));
+            }
             map.put(key, new CasterStats(item, name, projectileType, ballDamage, ballType, costAttr, costAmount,
-                    projectileSpeed, fastCooldown, slowCooldown, isOverwrite, lifetime, List.of()));
+                    projectileSpeed, fastCooldown, slowCooldown, isOverwrite, lifetime, List.of(), groups));
         }
         return new SyncCasterStatsPacket(map);
     }

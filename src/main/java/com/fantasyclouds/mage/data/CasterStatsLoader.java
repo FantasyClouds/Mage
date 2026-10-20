@@ -2,6 +2,8 @@ package com.fantasyclouds.mage.data;
 
 import com.fantasyclouds.mage.Mage;
 import com.fantasyclouds.mage.network.SyncCasterStatsPacket;
+import com.fantasyclouds.mage.spell.DamageGroup;
+import com.fantasyclouds.mage.spell.SpellAnalyzer;
 import com.fantasyclouds.mage.spell.SpellStep;
 import com.fantasyclouds.mage.spell.SpellSteps;
 import com.fantasyclouds.mage.spell.StepDefaults;
@@ -87,8 +89,14 @@ public class CasterStatsLoader extends SimpleJsonResourceReloadListener {
             sequence = List.of(SpellSteps.defaultProjectile(projectileType, ballDamage, ballType, projectileSpeed, lifetime));
         }
 
+        // 伤害组（HUD「单体伤害x数量」显示源）：静态推演；空且顶层有伤害→兜底 [ballDamage×1]。
+        List<DamageGroup> damageGroups = SpellAnalyzer.analyze(sequence);
+        if (damageGroups.isEmpty() && ballDamage > 0) {
+            damageGroups = List.of(new DamageGroup(ballDamage, 1));
+        }
+
         return new CasterStats(item, name, projectileType, ballDamage, ballType, costAttribute, costAmount,
-                projectileSpeed, fastCooldown, slowCooldown, isOverwrite, lifetime, sequence);
+                projectileSpeed, fastCooldown, slowCooldown, isOverwrite, lifetime, sequence, damageGroups);
     }
 
     @SubscribeEvent

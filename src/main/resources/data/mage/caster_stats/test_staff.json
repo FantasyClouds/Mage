@@ -14,7 +14,7 @@
   "slowCooldown": 20,
   "isOverwrite": true,
   "sequence": [
-    { "type": "projectile" },
+    { "type": "antigravity" },
     { "type": "split", "count": 3, "spread": 40 }
   ]
 }

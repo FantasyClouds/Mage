@@ -6,6 +6,12 @@ import com.google.gson.JsonObject;
  * 基础发射步骤（payload）：定义一颗弹的默认属性，推入 CastContext 待发射列表。
  * 通常出现在 sequence 开头；其后修饰符步骤对它（们）叠加改造。
  *
+ * <p>两个原语共用本类，仅 {@code antigravity} 不同：
+ * <ul>
+ *   <li>{@code projectile}：受重力（抛物线），antigravity=false，默认</li>
+ *   <li>{@code antigravity}：无重力（直线，当前主流法术），antigravity=true</li>
+ * </ul>
+ *
  * <p>JSON 参数（均可缺省，缺省先回落 {@link StepDefaults} 再取本体默认）：
  * <ul>
  *   <li>{@code projectileType} 外部弹实体 id；空/缺 = 内置 mage:spell_bolt</li>
@@ -22,27 +28,35 @@ public class ProjectileStep implements SpellStep {
     private final int ballType;
     private final double speed;
     private final int lifetime;
+    private final boolean antigravity;
 
     public double damage() { return damage; }
     public int ballType() { return ballType; }
     public double speed() { return speed; }
     public int lifetime() { return lifetime; }
     public String projectileType() { return projectileType; }
+    public boolean antigravity() { return antigravity; }
 
     public ProjectileStep(JsonObject json) {
-        this(json, StepDefaults.EMPTY);
+        this(json, StepDefaults.EMPTY, true); // 单参构造（旧折叠）默认 antigravity（保持旧行为=直线）
     }
 
     public ProjectileStep(JsonObject json, StepDefaults defs) {
+        this(json, defs, true);
+    }
+
+    /** 显式指定无重力与否（SpellSteps 按原语 type 分发）。 */
+    public ProjectileStep(JsonObject json, StepDefaults defs, boolean antigravity) {
         this.projectileType = json.has("projectileType") ? json.get("projectileType").getAsString() : defs.projectileType();
         this.damage = json.has("damage") ? json.get("damage").getAsDouble() : defs.getDamageOr(0.0);
         this.ballType = json.has("ballType") ? json.get("ballType").getAsInt() : defs.ballType();
         this.speed = json.has("speed") ? json.get("speed").getAsDouble() : defs.getSpeedOr(2.0);
         this.lifetime = json.has("lifetime") ? json.get("lifetime").getAsInt() : defs.getLifetimeOr(60);
+        this.antigravity = antigravity;
     }
 
     @Override
     public void apply(CastContext ctx) {
-        ctx.addProjectile(new SpellProjectile(projectileType, damage, ballType, speed, lifetime));
+        ctx.addProjectile(new SpellProjectile(projectileType, damage, ballType, speed, lifetime, antigravity, 0.0));
     }
 }

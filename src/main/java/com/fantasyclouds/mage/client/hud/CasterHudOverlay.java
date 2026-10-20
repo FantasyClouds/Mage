@@ -3,6 +3,7 @@ package com.fantasyclouds.mage.client.hud;
 import com.fantasyclouds.mage.client.CasterStatsClientCache;
 import com.fantasyclouds.mage.data.CasterStats;
 import com.fantasyclouds.mage.init.MageEffects;
+import com.fantasyclouds.mage.spell.DamageGroup;
 import com.fantasyclouds.mage.init.MageEnchantments;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
@@ -37,23 +38,33 @@ public class CasterHudOverlay {
         CasterStats s = CasterStatsClientCache.get(itemId);
         if (s == null) return;
 
-        // 伤害来源：sequence 总伤优先（法杖伤害已在步骤里），否则回落顶层 ballDamage
-        double baseDmg = s.totalProjectileDamage() > 0 ? s.totalProjectileDamage() : s.ballDamage();
-        double dmg = baseDmg + held.getEnchantmentLevel(MageEnchantments.FORCEFUL.get());
-        // 法力增幅药水加成（迁移自 SOFL HUD 口径）
-        if (player.hasEffect(MageEffects.MAGIC_BOOST.get())) {
-            dmg += player.getEffect(MageEffects.MAGIC_BOOST.get()).getAmplifier() + 1;
-        }
-        // 莱特兰法伤属性联动：伤害 × l2damagetracker:magic_damage（零依赖按注册名查）
+        // 伤害显示口径：单体伤害 x 数量（如 8x3）。多组用「 + 」连接（如 8x3 + 3x2）。
+        // 每发再加 forceful 附魔 + magic_boost；L2 magic_damage 是全局倍率，乘在单体上（显示预估，不参与结算）。
+        double forcefulBoost = held.getEnchantmentLevel(MageEnchantments.FORCEFUL.get());
+        double effectBoost = player.hasEffect(MageEffects.MAGIC_BOOST.get())
+                ? player.getEffect(MageEffects.MAGIC_BOOST.get()).getAmplifier() + 1 : 0.0;
+        double magicRatio = 1.0;
         Attribute magicAttr = ForgeRegistries.ATTRIBUTES.getValue(new ResourceLocation("l2damagetracker", "magic_damage"));
         if (magicAttr != null && player.getAttribute(magicAttr) != null) {
-            dmg *= player.getAttributeValue(magicAttr);
+            magicRatio = player.getAttributeValue(magicAttr);
+        }
+        java.util.List<DamageGroup> dmgGroups = s.damageGroups();
+        StringBuilder dmgSb = new StringBuilder();
+        if (dmgGroups == null || dmgGroups.isEmpty()) {
+            dmgSb.append(FORMAT.format((s.ballDamage() + forcefulBoost + effectBoost) * magicRatio)).append("x1");
+        } else {
+            for (int i = 0; i < dmgGroups.size(); i++) {
+                if (i > 0) dmgSb.append(" + ");
+                DamageGroup g = dmgGroups.get(i);
+                double per = (g.perDamage() + forcefulBoost + effectBoost) * magicRatio;
+                dmgSb.append(FORMAT.format(per)).append("x").append(g.count());
+            }
         }
         int cdTicks = held.getEnchantmentLevel(MageEnchantments.SPELL_POTENCY.get()) > 0
                 ? s.fastCooldown() : s.slowCooldown();
 
         String[] lines = {
-                "§a" + Component.translatable("gui.caster_stats.damage", FORMAT.format(dmg)).getString(),
+                "§a" + Component.translatable("gui.caster_stats.damage", dmgSb.toString()).getString(),
                 "§b" + Component.translatable("gui.caster_stats.type", typeName(s.ballType())).getString(),
                 "§9" + Component.translatable("gui.caster_stats.mana", FORMAT.format(s.costAmount())).getString(),
                 "§6" + Component.translatable("gui.caster_stats.speed", FORMAT.format(s.projectileSpeed())).getString(),

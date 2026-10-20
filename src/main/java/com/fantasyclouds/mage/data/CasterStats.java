@@ -1,5 +1,6 @@
 package com.fantasyclouds.mage.data;
 
+import com.fantasyclouds.mage.spell.DamageGroup;
 import com.fantasyclouds.mage.spell.SpellStep;
 import net.minecraft.resources.ResourceLocation;
 
@@ -32,7 +33,8 @@ public record CasterStats(
         int slowCooldown,
         boolean isOverwrite,               // 是否吞掉原物品右键行为
         int lifetime,                      // 弹射物存活 ticks（顶层默认）
-        List<SpellStep> sequence           // 有序法术步骤（发射唯一依据，永不为空）
+        List<SpellStep> sequence,          // 有序法术步骤（发射唯一依据，永不为空）
+        List<DamageGroup> damageGroups     // 静态推演的伤害组（HUD「NxM」显示源；客户端经网络同步拿到）
 ) {
 
     /** sequence 内所有 projectile 步骤基础伤害之和（供 HUD 总伤预估，未来扩展）。 */

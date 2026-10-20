@@ -43,7 +43,9 @@ public final class SpellSteps {
             }
             String type = obj.get("type").getAsString();
             SpellStep step = switch (type) {
-                case "projectile" -> new ProjectileStep(obj, defs);
+                // projectile=受重力（抛物线）；antigravity=无重力（直线，当前主流）
+                case "projectile" -> new ProjectileStep(obj, defs, false);
+                case "antigravity" -> new ProjectileStep(obj, defs, true);
                 case "split" -> new SplitStep(obj);
                 default -> {
                     LOGGER.warn("[MageCaster] unknown spell step type '{}', skipped", type);

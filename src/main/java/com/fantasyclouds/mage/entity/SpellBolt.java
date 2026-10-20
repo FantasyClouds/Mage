@@ -25,17 +25,24 @@ public class SpellBolt extends AbstractHurtingProjectile {
     private static final EntityDataAccessor<Integer> DATA_SPELL_TYPE =
             SynchedEntityData.defineId(SpellBolt.class, EntityDataSerializers.INT);
 
+    /** 无重力（直线）？默认 true，对应 antigravity 原语（当前主流法术）。projectile 原语为 false 走重力抛物线。 */
+    private boolean antigravity = true;
+
     public SpellBolt(EntityType<? extends AbstractHurtingProjectile> type, Level level) {
         super(type, level);
     }
 
     /** 发射：同时设置 deltaMovement 与 x/y/zPower（后者是本类 tick 的实际驱动源）。 */
-    public void launch(Vec3 movement) {
+    public void launch(Vec3 movement, boolean antigravity) {
+        this.antigravity = antigravity;
         this.setDeltaMovement(movement);
         this.xPower = movement.x;
         this.yPower = movement.y;
         this.zPower = movement.z;
     }
+
+    /** 受重力弹的逐 tick 重力加速度（y 方向，每 tick 减；值越小越平）。 */
+    private static final double GRAVITY = 0.04;
 
     public void setSpellType(int type) {
         this.entityData.set(DATA_SPELL_TYPE, type);
@@ -53,6 +60,11 @@ public class SpellBolt extends AbstractHurtingProjectile {
 
     @Override
     public void tick() {
+        if (!this.level().isClientSide && !this.antigravity) {
+            // 受重力抛物线：每 tick 沿 Y 减速度（xPower 机制在 super.tick 会从 deltaMovement/xPower 重设速度）
+            this.yPower -= GRAVITY;
+            this.setDeltaMovement(this.getDeltaMovement().add(0, -GRAVITY, 0));
+        }
         super.tick();
         if (this.level().isClientSide) return;
         CompoundTag tag = this.getPersistentData();

@@ -28,24 +28,32 @@ public class SpellProjectile {
     public int ballType;
     public double speed;
     public int lifetime;
+    /** 无重力：false=受重力抛物线（projectile），true=直线（antigravity，即当前主流法术）。 */
+    public boolean antigravity;
     /** 相对玩家朝向的水平偏角（弧度，0 = 正前方）。split 风格修饰符改写它。 */
     public double angleOffset;
 
     public SpellProjectile(String projectileType, double damage, int ballType, double speed, int lifetime) {
-        this(projectileType, damage, ballType, speed, lifetime, 0.0);
+        this(projectileType, damage, ballType, speed, lifetime, true, 0.0);
     }
 
     public SpellProjectile(String projectileType, double damage, int ballType, double speed, int lifetime, double angleOffset) {
+        this(projectileType, damage, ballType, speed, lifetime, true, angleOffset);
+    }
+
+    public SpellProjectile(String projectileType, double damage, int ballType, double speed, int lifetime, boolean antigravity, double angleOffset) {
         this.projectileType = projectileType;
         this.damage = damage;
         this.ballType = ballType;
         this.speed = speed;
         this.lifetime = lifetime;
+        this.antigravity = antigravity;
         this.angleOffset = angleOffset;
     }
 
     public SpellProjectile copy() {
-        return new SpellProjectile(projectileType, damage, ballType, speed, lifetime, angleOffset);
+        SpellProjectile p = new SpellProjectile(projectileType, damage, ballType, speed, lifetime, antigravity, angleOffset);
+        return p;
     }
 
     /** 实际生成实体（外部弹保留视觉；内置弹走 SpellBolt）。NBT 协议与迁移前一致。 */
@@ -62,13 +70,13 @@ public class SpellProjectile {
         if (entity == null) return;
 
         if (entity instanceof Projectile projectile) projectile.setOwner(player);
-        entity.setNoGravity(true);
+        entity.setNoGravity(antigravity);
         if (entity instanceof Mob mob) mob.setNoAi(true);
 
         entity.setPos(player.getX(), player.getEyeY() - 0.1, player.getZ());
         Vec3 motion = dir.scale(speed);
         if (entity instanceof SpellBolt bolt) {
-            bolt.launch(motion);
+            bolt.launch(motion, antigravity);
             bolt.setSpellType(ballType);
         } else {
             entity.setDeltaMovement(motion);

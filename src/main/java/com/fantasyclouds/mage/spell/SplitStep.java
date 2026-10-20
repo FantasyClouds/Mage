@@ -21,6 +21,9 @@ public class SplitStep implements SpellStep {
     private final int count;
     private final double spread;
 
+    public int count() { return count; }
+    public double spread() { return spread; }
+
     public SplitStep(JsonObject json) {
         this.count = json.has("count") ? json.get("count").getAsInt() : 2;
         this.spread = json.has("spread") ? json.get("spread").getAsDouble() : 30.0;
