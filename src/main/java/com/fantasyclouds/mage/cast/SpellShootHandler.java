@@ -20,7 +20,10 @@ import net.minecraftforge.fml.common.Mod;
  * <p>行为：按住右键 = <b>连发</b>，施法频率由物品冷却限速；每次发射扣消耗资源，资源不足即停。
  * <b>保底冷却</b>：配置 cooldown ≤ 0 时强制用 0.5s 下限，防无冷却配置机枪式扣蓝。
  *
- * <p>发射：扣耗/冷却通过后走 {@link SpellPipeline}（Noita 式有序步骤），
+ * <p>扣蓝顺序（2026-10-20 修）：<b>先 canAfford 检查、施法成功后才 consume</b>——
+ * 弹未真正生成则不扣蓝、不挥动、不进入冷却（可立即重试）。杜绝"没施法却扣蓝"。
+ *
+ * <p>发射：资源/冷却通过后走 {@link SpellPipeline}（Noita 式有序步骤），
  * 弹由 sequence 里的步骤装配（payload + 修饰符），具体生成实体逻辑在
  * {@code SpellProjectile.launch}（外部弹视觉保留、带 Mage NBT、命中走通用接管）。
  */
@@ -45,10 +48,15 @@ public class SpellShootHandler {
         // 冷却门控（保险；正常时 Forge 已不触发冷却中的事件）
         if (player.getCooldowns().isOnCooldown(item.getItem())) return;
 
-        // 资源检查/消耗；不足即停（连发到蓝空自动断）
-        if (!SpellCostManager.tryConsume(player, stats.costAttribute(), stats.costAmount())) return;
+        // 资源足够才施法（先查不扣；真正施法成功后才 consume——"没真正施法不扣蓝"）
+        if (!SpellCostManager.canAfford(player, stats.costAttribute(), stats.costAmount())) return;
 
-        // 施法成功 → 主手挥动（双参 swing，本人可见）
+        // 走法术流水线：按 sequence 装配弹并统一发射（返回是否有弹真正生成）
+        boolean cast = SpellPipeline.cast(new CastContext(level, player, item), stats);
+        if (!cast) return; // 弹没生成：不扣蓝、不挥动、不触发冷却（可立即重试）
+
+        // 施法成功 → 扣消耗 + 主手挥动（双参 swing，本人可见）
+        SpellCostManager.consume(player, stats.costAttribute(), stats.costAmount());
         player.swing(InteractionHand.MAIN_HAND, true);
 
         // 清旧冷却并重设（每冷却周期发射一发；保底下限防机枪）
@@ -57,8 +65,5 @@ public class SpellShootHandler {
                 ? stats.fastCooldown() : stats.slowCooldown();
         if (cd <= 0) cd = MIN_COOLDOWN_TICKS;
         player.getCooldowns().addCooldown(item.getItem(), cd);
-
-        // 走法术流水线：按 sequence 装配弹并统一发射
-        SpellPipeline.cast(new CastContext(level, player, item), stats);
     }
 }

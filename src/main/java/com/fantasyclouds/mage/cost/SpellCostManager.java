@@ -38,21 +38,36 @@ public class SpellCostManager {
     private SpellCostManager() {}
 
     /**
-     * 检查并消耗。成功返回 true（已扣）；失败返回 false 且不扣。
+     * 检查是否足以施法（<b>不扣</b>）。施法成功后才调 {@link #consume} 真正扣——保证"没真正施法不扣蓝"。
      *
      * <p>两条路径：
-     * - {@code cost.attribute} 命名空间为 {@code brutality} → <b>反射桥接</b>调 Brutality 的
-     *   ManaHelper 扣<b>当前蓝条</b>（非上限；Mage 零编译依赖，运行时检测到才生效，没有则放行）；
-     * - 其他属性 → 纯属性扣减（记账 + 固定 UUID 修饰符 + Mage 侧回复）。
+     * - {@code cost.attribute} 命名空间为 {@code brutality} → <b>反射桥接</b>读 Brutality
+     *   ManaHelper 的<b>当前蓝条</b>（非上限；零编译依赖，运行时无则放行）；
+     * - 其他属性 → 读当前属性值是否足够。
      */
-    public static boolean tryConsume(Player player, ResourceLocation costAttribute, double amount) {
+    public static boolean canAfford(Player player, ResourceLocation costAttribute, double amount) {
         if (costAttribute == null || amount <= 0) return true;
         if ("brutality".equals(costAttribute.getNamespace())) {
-            return tryConsumeBrutalityMana(player, amount);
+            return hasBrutalityMana(player, amount);
         }
         Attribute attr = ForgeRegistries.ATTRIBUTES.getValue(costAttribute);
         if (attr == null || player.getAttribute(attr) == null) return true; // 属性不可用：不拦截
-        if (player.getAttributeValue(attr) < amount) return false;           // 剩余不足
+        return player.getAttributeValue(attr) >= amount;
+    }
+
+    /**
+     * 真正扣减（施法流水线执行成功后调用）。返回是否已扣。
+     *
+     * <p>brutality 命名空间走反射桥扣当前蓝条；其他属性走记账 + 固定 UUID 修饰符。
+     * 属性不存在/反射失败 → 不扣但返回 true（放行施法，避免配置错误锁死法术）。
+     */
+    public static boolean consume(Player player, ResourceLocation costAttribute, double amount) {
+        if (costAttribute == null || amount <= 0) return true;
+        if ("brutality".equals(costAttribute.getNamespace())) {
+            return consumeBrutalityMana(player, amount);
+        }
+        Attribute attr = ForgeRegistries.ATTRIBUTES.getValue(costAttribute);
+        if (attr == null || player.getAttribute(attr) == null) return true;
 
         Map<ResourceLocation, Double> ledger = readLedger(player);
         double consumed = ledger.getOrDefault(costAttribute, 0.0) + amount;
@@ -60,6 +75,12 @@ public class SpellCostManager {
         applyConsumedModifier(player, attr, consumed);
         writeLedger(player, ledger);
         return true;
+    }
+
+    /** 兼容旧调用：检查+扣一次完成（不推荐——施法应先 canAfford，成功后 consume）。 */
+    public static boolean tryConsume(Player player, ResourceLocation costAttribute, double amount) {
+        if (!canAfford(player, costAttribute, amount)) return false;
+        return consume(player, costAttribute, amount);
     }
 
     /**
@@ -86,17 +107,27 @@ public class SpellCostManager {
         return true;
     }
 
+    /** Brutality 蓝反射桥：检查当前蓝条是否足够（不扣）。无/反射失败 → 放行。 */
+    private static boolean hasBrutalityMana(Player player, double amount) {
+        try {
+            Class<?> helper = Class.forName("net.goo.brutality.util.magic.ManaHelper");
+            Method getMana = helper.getMethod("getMana", Player.class);
+            float current = (float) getMana.invoke(null, player);
+            return current >= (float) amount;
+        } catch (Exception e) {
+            Mage.LOGGER.warn("[Mage] Brutality mana bridge unavailable, check skipped: {}", e.toString());
+            return true;
+        }
+    }
+
     /**
      * Brutality 蓝反射桥（零编译依赖）：扣<b>当前蓝条</b>（capability），不是上限属性。
      * 运行时检测到 Brutality 才生效；没有/反射失败则放行不扣。
      */
-    private static boolean tryConsumeBrutalityMana(Player player, double amount) {
+    private static boolean consumeBrutalityMana(Player player, double amount) {
         try {
             Class<?> helper = Class.forName("net.goo.brutality.util.magic.ManaHelper");
-            Method getMana = helper.getMethod("getMana", Player.class);
             Method modify = helper.getMethod("modifyManaValue", Player.class, float.class);
-            float current = (float) getMana.invoke(null, player);
-            if (current < (float) amount) return false;
             modify.invoke(null, player, -(float) amount);
             return true;
         } catch (Exception e) {

@@ -71,14 +71,18 @@ public class SpellBoltRenderer extends EntityRenderer<SpellBolt> {
             Entity proxy = getProxy(type, visual);
             if (proxy == null) return false;
 
-            // 把施法弹的姿态搬给代理：位置/朝向/tick（动画推进对齐）。
-            // yawOffset 用于校准目标模型自带的朝向基准（如酸性斩击需 ±90°）
+            // 把施法弹的姿态与运动搬给代理：位置/朝向/速度/tick（动画推进对齐）。
+            // ⚠️ 关键：很多目标 Renderer（如 lethality AcidicSlashRenderer）**不读 yRot**，
+            // 而是从 getDeltaMovement() 自己算朝向——代理 deltaMovement 必须搬过去，
+            // 否则朝向恒为固定值（锁死不随发射角度变）。
+            // yawOffset 仅用于校准目标模型自带的静态朝向基准（有需要才配）。
             float visualYaw = bolt.getYRot() + bolt.getSpellYawOffset();
             proxy.setPos(bolt.getX(), bolt.getY(), bolt.getZ());
             proxy.setYRot(visualYaw);
             proxy.setXRot(bolt.getXRot());
             proxy.yRotO = bolt.yRotO + bolt.getSpellYawOffset();
             proxy.xRotO = bolt.xRotO;
+            proxy.setDeltaMovement(bolt.getDeltaMovement());
             proxy.tickCount = bolt.tickCount;
             if (proxy instanceof Projectile p) {
                 p.setOwner(bolt.getOwner()); // bolt 本身即 Projectile（SpellBolt 继承 AbstractHurtingProjectile）
