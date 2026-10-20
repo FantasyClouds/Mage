@@ -34,6 +34,10 @@ public abstract class ProjectileSpellDamageMixin {
         CompoundTag tag = self.getPersistentData();
         if (!tag.contains("spell_damage")) return;
 
+        // 穿透弹不走通用接管：SpellBolt 自身 tick AABB 扫描结算（每实体一次），
+        // 若在此 discard/cancel 会杀死穿透弹。识别 spell_pierce NBT 放行。
+        if (tag.getInt("spell_pierce") > 0) return;
+
         // 幂等：同一弹可能被 onHit / onHitEntity 双路径或同 tick 二次命中结算 → 只结算一次
         if (tag.getBoolean("mage$spell_handled")) {
             ci.cancel(); // 已结算：抑制原生二次处理，不再重复伤害

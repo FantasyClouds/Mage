@@ -7,18 +7,24 @@ import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.projectile.AbstractHurtingProjectile;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.phys.Vec3;
+
+import java.util.UUID;
 
 /**
  * 内置法弹 {@code mage:spell_bolt}（零外部依赖）。
  * - 移动：{@link #launch} 设置 deltaMovement 与 x/y/zPower（AbstractHurtingProjectile.tick 会从 xPower 重设速度）；
  * - 生命周期：NBT {@code spell_death_time}（世界时间，持久，不受 /reload 影响）；
  * - 命中：按 NBT spell_damage/spell_type/spell_enchant_bonus 走 {@link SpellDamageHelper} 统一魔法结算；
- * - 类型着色：spell_type 走 SynchedEntityData 同步给客户端渲染。
+ * - 类型着色：spell_type 走 SynchedEntityData 同步给客户端渲染；
+ * - 穿透：NBT {@code spell_pierce} > 0 时进入穿透模式——穿过实体/方块不消失、每实体只结算一次
+ *   （UUID 去重）、命中 {@code count} 个后消失。参考 lethality AcidicSlashEntity。
  */
 public class SpellBolt extends AbstractHurtingProjectile {
 
@@ -27,6 +33,12 @@ public class SpellBolt extends AbstractHurtingProjectile {
 
     /** 无重力（直线）？默认 true，对应 antigravity 原语（当前主流法术）。projectile 原语为 false 走重力抛物线。 */
     private boolean antigravity = true;
+
+    /** 穿透剩余次数（NBT spell_pierce 初始化）；<=0 时非穿透。 */
+    private int pierceRemaining = 0;
+
+    /** 穿透模式已结算过的实体 UUID（每 tick AABB 扫描用）；持久 NBT spell_pierced 跨存档兜底。 */
+    private String piercedUuids = "";
 
     public SpellBolt(EntityType<? extends AbstractHurtingProjectile> type, Level level) {
         super(type, level);
@@ -43,6 +55,8 @@ public class SpellBolt extends AbstractHurtingProjectile {
 
     /** 受重力弹的逐 tick 重力加速度（y 方向，每 tick 减；值越小越平）。 */
     private static final double GRAVITY = 0.04;
+    /** 穿透模式每 tick 扫描半径（不含弹本体碰撞箱）。 */
+    private static final double PIERCE_RADIUS = 0.9;
 
     public void setSpellType(int type) {
         this.entityData.set(DATA_SPELL_TYPE, type);
@@ -58,6 +72,10 @@ public class SpellBolt extends AbstractHurtingProjectile {
         this.entityData.define(DATA_SPELL_TYPE, 0);
     }
 
+    private boolean isPiercing() {
+        return pierceRemaining > 0;
+    }
+
     @Override
     public void tick() {
         if (!this.level().isClientSide && !this.antigravity) {
@@ -67,35 +85,75 @@ public class SpellBolt extends AbstractHurtingProjectile {
         }
         super.tick();
         if (this.level().isClientSide) return;
+
         CompoundTag tag = this.getPersistentData();
+        if (tag.contains("spell_pierce") && pierceRemaining == 0) {
+            pierceRemaining = tag.getInt("spell_pierce");
+            piercedUuids = tag.getString("spell_pierced");
+        }
+
+        // 穿透模式：每 tick 扫描周围实体，未结算过的结算（每实体一次 = 消耗一次穿透），count 用完即消失
+        if (isPiercing()) {
+            Entity owner = this.getOwner();
+            AABB box = this.getBoundingBox().inflate(PIERCE_RADIUS);
+            for (LivingEntity target : this.level().getEntitiesOfClass(LivingEntity.class, box,
+                    e -> e != owner && e.isAlive() && !alreadyPierced(e))) {
+                if (pierceRemaining <= 0) break;
+                markPierced(target);
+                pierceRemaining--; // 命中一个目标消耗一次，即使伤害被盔甲减免也计数（保证"穿N个"可控）
+                SpellDamageHelper.applySpellDamage(this.level(), target, owner != null ? owner : this, this);
+                if (tag.getBoolean("spell_enchant_burst")) {
+                    target.setSecondsOnFire(10);
+                }
+            }
+            tag.putString("spell_pierced", piercedUuids);
+            if (pierceRemaining <= 0) {
+                this.discard();
+                return;
+            }
+        }
+
         if (tag.contains("spell_death_time") && this.level().getGameTime() >= tag.getLong("spell_death_time")) {
             this.discard();
         }
     }
 
-    @Override
-    protected void onHitEntity(EntityHitResult result) {
-        if (!this.level().isClientSide) {
-            // 幂等：通用 ProjectileSpellDamageMixin 已结算过则不再结算（防双路径双倍伤害）
-            if (this.getPersistentData().getBoolean("mage$spell_handled")) {
-                this.discard();
-                return;
-            }
-            Entity owner = this.getOwner();
-            SpellDamageHelper.applySpellDamage(this.level(), result.getEntity(), owner != null ? owner : this, this);
-            // 爆裂法术（mage:burst）：命中点燃目标 10 秒（复刻 adventuresmod BURST 行为）
-            if (this.getPersistentData().getBoolean("spell_enchant_burst")) {
-                result.getEntity().setSecondsOnFire(10);
-            }
-            this.discard();
+    private boolean alreadyPierced(Entity e) {
+        if (piercedUuids.isEmpty()) return false;
+        return (" " + piercedUuids + " ").contains(" " + e.getUUID() + " ");
+    }
+
+    private void markPierced(Entity e) {
+        if (piercedUuids.isEmpty()) {
+            piercedUuids = e.getUUID().toString();
+        } else if (!alreadyPierced(e)) {
+            piercedUuids += " " + e.getUUID().toString();
         }
     }
 
     @Override
-    protected void onHitBlock(BlockHitResult result) {
-        if (!this.level().isClientSide) {
+    protected void onHitEntity(EntityHitResult result) {
+        if (this.level().isClientSide) return;
+        if (isPiercing()) return; // 穿透：不在此结算/不消失，tick AABB 扫描负责（每实体一次）
+        // 幂等：通用 ProjectileSpellDamageMixin 已结算过则不再结算（防双路径双倍伤害）
+        if (this.getPersistentData().getBoolean("mage$spell_handled")) {
             this.discard();
+            return;
         }
+        Entity owner = this.getOwner();
+        SpellDamageHelper.applySpellDamage(this.level(), result.getEntity(), owner != null ? owner : this, this);
+        // 爆裂法术（mage:burst）：命中点燃目标 10 秒（复刻 adventuresmod BURST 行为）
+        if (this.getPersistentData().getBoolean("spell_enchant_burst")) {
+            result.getEntity().setSecondsOnFire(10);
+        }
+        this.discard();
+    }
+
+    @Override
+    protected void onHitBlock(BlockHitResult result) {
+        if (this.level().isClientSide) return;
+        if (isPiercing()) return; // 穿透：穿墙不消失
+        this.discard();
     }
 
     @Override

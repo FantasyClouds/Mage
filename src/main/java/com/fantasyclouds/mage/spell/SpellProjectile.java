@@ -32,6 +32,8 @@ public class SpellProjectile {
     public boolean antigravity;
     /** 相对玩家朝向的水平偏角（弧度，0 = 正前方）。split 风格修饰符改写它。 */
     public double angleOffset;
+    /** 穿透数：>0 时弹穿墙不消失、每实体只结算一次，命中 count 个后消失（PierceStep 累加）。 */
+    public int pierceCount;
 
     public SpellProjectile(String projectileType, double damage, int ballType, double speed, int lifetime) {
         this(projectileType, damage, ballType, speed, lifetime, true, 0.0);
@@ -53,6 +55,7 @@ public class SpellProjectile {
 
     public SpellProjectile copy() {
         SpellProjectile p = new SpellProjectile(projectileType, damage, ballType, speed, lifetime, antigravity, angleOffset);
+        p.pierceCount = this.pierceCount;
         return p;
     }
 
@@ -86,6 +89,7 @@ public class SpellProjectile {
         tag.putDouble("spell_damage", damage);
         tag.putInt("spell_type", ballType);
         tag.putLong("spell_death_time", level.getGameTime() + lifetime);
+        if (pierceCount > 0) tag.putInt("spell_pierce", pierceCount);
         int forceful = ctx.held.getEnchantmentLevel(MageEnchantments.FORCEFUL.get());
         if (forceful > 0) tag.putDouble("spell_enchant_bonus", forceful);
         if (ctx.held.getEnchantmentLevel(MageEnchantments.BURST.get()) > 0) tag.putBoolean("spell_enchant_burst", true);
