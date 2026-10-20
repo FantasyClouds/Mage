@@ -1,0 +1,22 @@
+{
+  "gui.caster_stats.damage": "Damage: %s",
+  "gui.caster_stats.type": "Type: %s",
+  "gui.caster_stats.mana": "Mana Cost: %s",
+  "gui.caster_stats.speed": "Speed: %s",
+  "gui.caster_stats.cooldown": "Cooldown: %ss",
+  "attribute.mage.mana": "Mana",
+  "enchantment.mage.spell_potency": "Spell Potency",
+  "enchantment.mage.spell_potency.desc": "Casters have less cooldown time",
+  "enchantment.mage.forceful": "Forceful",
+  "enchantment.mage.forceful.desc": "Increases spell damage",
+  "enchantment.mage.burst": "Burst",
+  "enchantment.mage.burst.desc": "Spells will inflict fire upon targets",
+  "item.mage.test_staff": "Test Staff",
+  "item.mage.magic_candy": "Magic Candy",
+  "item.mage.mana_item": "Mana",
+  "effect.mage.magic_boost": "Magic Boost",
+  "item.minecraft.potion.effect.magic_damage_boost": "Potion of Magic Boost",
+  "item.minecraft.potion.effect.magic_damage_boost_long": "Potion of Magic Boost",
+  "item.minecraft.potion.effect.magic_damage_boost_plus": "Potion of Magic Boost",
+  "itemGroup.mage_tab": "Mage Spells"
+}

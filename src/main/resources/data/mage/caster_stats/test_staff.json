@@ -1,0 +1,16 @@
+{
+  "item": "mage:test_staff",
+  "name": "测试法杖",
+  "projectileType": "",
+  "ballDamage": 8.0,
+  "ballType": 3,
+  "cost": {
+    "attribute": "brutality:max_mana",
+    "amount": 10.0
+  },
+  "projectileSpeed": 2.0,
+  "fastCooldown": 12,
+  "slowCooldown": 20,
+  "isOverwrite": true,
+  "lifetime": 40
+}
