@@ -78,8 +78,8 @@ public class SpellBoltRenderer extends EntityRenderer<SpellBolt> {
             proxy.yRotO = bolt.yRotO;
             proxy.xRotO = bolt.xRotO;
             proxy.tickCount = bolt.tickCount;
-            if (proxy instanceof Projectile p && bolt instanceof Projectile bp) {
-                p.setOwner(bp.getOwner());
+            if (proxy instanceof Projectile p) {
+                p.setOwner(bolt.getOwner()); // bolt 本身即 Projectile（SpellBolt 继承 AbstractHurtingProjectile）
             }
 
             // 用目标实体自己的 Renderer 渲染（模型/动画/贴图全由它负责）
