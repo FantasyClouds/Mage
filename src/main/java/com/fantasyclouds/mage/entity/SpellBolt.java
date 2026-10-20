@@ -1,10 +1,14 @@
 package com.fantasyclouds.mage.entity;
 
 import com.fantasyclouds.mage.cast.SpellDamageHelper;
+import net.minecraft.core.particles.ParticleType;
+import net.minecraft.core.particles.SimpleParticleType;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
@@ -14,6 +18,7 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.phys.Vec3;
+import net.minecraftforge.registries.ForgeRegistries;
 
 import java.util.UUID;
 
@@ -125,8 +130,34 @@ public class SpellBolt extends AbstractHurtingProjectile {
             }
         }
 
+        // 拖尾粒子（NBT spell_particle；服务端每 tick 在弹位置发）
+        spawnTrailParticles(tag);
+
         if (tag.contains("spell_death_time") && this.level().getGameTime() >= tag.getLong("spell_death_time")) {
             this.discard();
+        }
+    }
+
+    /** 服务端每 tick 发拖尾粒子：粒子类型按注册名查（查不到/客户端静默跳过）。 */
+    private void spawnTrailParticles(CompoundTag tag) {
+        if (this.level().isClientSide) return;
+        String id = tag.getString("spell_particle");
+        if (id.isEmpty()) return;
+        try {
+            ParticleType<?> type = ForgeRegistries.PARTICLE_TYPES.getValue(new ResourceLocation(id));
+            if (type == null) return;
+            int count = tag.getInt("spell_particle_count");
+            if (count <= 0) count = 2;
+            // 简单粒子直接作为 ParticleOptions；复杂粒子（需 NBT）跳过以免 API 强转错
+            if (type instanceof SimpleParticleType simple) {
+                ((ServerLevel) this.level()).sendParticles(simple,
+                        this.getX(), this.getY(), this.getZ(), count,
+                        this.random.nextDouble() * 0.1 - 0.05,
+                        this.random.nextDouble() * 0.1 - 0.05,
+                        this.random.nextDouble() * 0.1 - 0.05, 0.02);
+            }
+        } catch (Throwable t) {
+            // 粒子查不到/异常：静默跳过，不影响弹
         }
     }
 
