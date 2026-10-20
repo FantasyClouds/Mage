@@ -4,6 +4,7 @@
 Mage 是从遗尘往事整合包的 SOFL 模组里**抽取出来的通用施法内核**：modid `mage`，只依赖 minecraft+forge（**零第三方编译依赖**，可单独发布给任意整合包）。它是宿主（整合包）的**消费对象**——Mage 不复用宿主、宿主经数据包 + kubejs + story 模组来消费 Mage。施法逻辑由 JSON 驱动，不写死在代码里。
 
 ## 线头 · 去哪看项目细节
+- **架构·为什么（首选）**：`docs/architecture.md`——业务效果→代码→技术 一条索引 + 设计决策（零依赖反射桥、当前值扣减、L2 不双乘、与 SOFL/L2 边界）。改契约/理解链路先读它。
 - **源码**：`src/main/java/com/fantasyclouds/mage/`——按职责分包：
   - `data/` 数据契约（CasterStats record / CasterRegistry / CasterStatsLoader 读 `caster_stats/*.json`）
   - `cost/` 消耗（SpellCostManager：`cost:{attribute,amount}` 配"耗哪个属性"，当前值扣减）
