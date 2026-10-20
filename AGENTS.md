@@ -25,5 +25,3 @@ Mage 是从遗尘往事整合包的 SOFL 模组里**抽取出来的通用施法�
 
 ## 红线 / 禁止
 1. **零依赖铁律**：编译依赖只许 minecraft + forge；引用任何第三方 mod 私包 = 违规（特殊 mod 需反射 `Class.forName` 桥接）。
-2. **迁移非双系统**：法术体系正主 = Mage；SOFL 侧通用法术 procedures 已注释/no-op，勿恢复。
-3. 附魔/药水/糖果资产照搬 SOFL 不另起炉灶（`mage:spell_potency/forceful/burst`、magic_damage_boost 药水系列、魔法糖果）。
