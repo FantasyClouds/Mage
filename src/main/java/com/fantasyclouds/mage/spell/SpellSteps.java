@@ -48,6 +48,7 @@ public final class SpellSteps {
                 case "antigravity" -> new ProjectileStep(obj, defs, true);
                 case "split" -> new SplitStep(obj);
                 case "pierce" -> new PierceStep(obj);
+                case "visual" -> new VisualStep(obj);
                 default -> {
                     LOGGER.warn("[MageCaster] unknown spell step type '{}', skipped", type);
                     yield null;

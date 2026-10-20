@@ -20,7 +20,7 @@ modid:     mage
 2. 数据包（或 `config/openloader/data/…`）里给对应目录放一个法杖配置：`data/<ns>/caster_stats/<任意名>.json`
 3. 进游戏，手持配置中 `item` 指定的物品右键施法
 
-配置示例（`data/mage/caster_stats/test_staff.json`）：
+配置示例（整合包数据包 `data/<ns>/caster_stats/<任意名>.json`，**模组 jar 内不内置任何样例**）：
 
 ```json
 {
@@ -35,7 +35,8 @@ modid:     mage
   "slowCooldown": 20,
   "isOverwrite": true,
   "sequence": [
-    { "type": "antigravity", "visual": "lethality:acidic_slash" },
+    { "type": "antigravity" },
+    { "type": "visual", "entity": "lethality:acidic_slash" },
     { "type": "split", "count": 3, "spread": 40 },
     { "type": "pierce", "count": 5 }
   ]
@@ -77,28 +78,29 @@ modid:     mage
 
 | type | 分类 | 参数 | 说明 |
 |---|---|---|---|
-| `projectile` | payload | `damage` `ballType` `speed` `lifetime` `projectileType` `visual` | 发射受重力弹（抛物线） |
+| `projectile` | payload | `damage` `ballType` `speed` `lifetime` `projectileType` | 发射受重力弹（抛物线） |
 | `antigravity` | payload | 同上 | 发射无重力弹（直线，当前主流） |
+| `visual` | modifier | `entity` | **外观修饰**：把弹渲染委托给任意模组实体模型 |
 | `split` | modifier | `count`（倍率） `spread`（总角度·度） | 每颗弹复制 count 份扇形分布；**可叠层**（×2 再 ×2 = ×4） |
 | `pierce` | modifier | `count`（可穿透实体数） | 穿墙不消失、每个实体只结算一次、穿够 count 个消失 |
 | _homing/area/bounce…_ | 规划中 | — | 后续原语，走同一模式 |
 
-示例：`antigravity → split×3 → pierce×5` = 3 颗直线弹，每颗穿透 5 个实体。
+示例：`antigravity → visual → split×3 → pierce×5` = 3 颗直线弹（全用目标实体外观），每颗穿透 5 个实体。
 
 ---
 
 ## 视觉委托渲染（用任意模组实体的模型当法术弹）
 
-给 payload 步骤加 `"visual": "<modid>:<entity>"`，该弹就会**用目标实体的模型/动画渲染**
-（纯客户端，服务端零改动）：
+外观是**修饰属性**，独立成 `visual` 步骤，作用于它之前收集的所有弹：
 
 ```json
-{ "type": "antigravity", "visual": "lethality:acidic_slash" }
+{ "type": "visual", "entity": "lethality:acidic_slash" }
 ```
 
 - 原理：客户端渲染器发现 `spell_visual` 后，创建目标实体的**代理实例**（仅渲染用，不进
   世界、不同步），用目标实体自己的 Renderer 渲染——任意模组的 GeoModel/模型都能显示。
 - 目标实体查不到 / 创建失败 → 优雅回落到内置 billboard，不会崩渲染。
+- 语义：视觉与发射解耦——split 复制的每一颗都继承同一外观；pierce 不改外观。
 
 ---
 
