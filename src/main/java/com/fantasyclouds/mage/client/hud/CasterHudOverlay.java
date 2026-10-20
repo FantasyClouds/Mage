@@ -37,7 +37,9 @@ public class CasterHudOverlay {
         CasterStats s = CasterStatsClientCache.get(itemId);
         if (s == null) return;
 
-        double dmg = s.ballDamage() + held.getEnchantmentLevel(MageEnchantments.FORCEFUL.get());
+        // 伤害来源：sequence 总伤优先（法杖伤害已在步骤里），否则回落顶层 ballDamage
+        double baseDmg = s.totalProjectileDamage() > 0 ? s.totalProjectileDamage() : s.ballDamage();
+        double dmg = baseDmg + held.getEnchantmentLevel(MageEnchantments.FORCEFUL.get());
         // 法力增幅药水加成（迁移自 SOFL HUD 口径）
         if (player.hasEffect(MageEffects.MAGIC_BOOST.get())) {
             dmg += player.getEffect(MageEffects.MAGIC_BOOST.get()).getAmplifier() + 1;

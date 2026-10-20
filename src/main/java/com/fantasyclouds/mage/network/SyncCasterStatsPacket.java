@@ -10,6 +10,7 @@ import net.minecraftforge.network.NetworkEvent;
 import net.minecraftforge.network.PacketDistributor;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
 
@@ -62,8 +63,9 @@ public class SyncCasterStatsPacket {
             int slowCooldown = buf.readInt();
             boolean isOverwrite = buf.readBoolean();
             int lifetime = buf.readInt();
+            // sequence 是服务端发射依据，客户端无需可执行步骤（HUD 只读顶层字段）→ 空表。
             map.put(key, new CasterStats(item, name, projectileType, ballDamage, ballType, costAttr, costAmount,
-                    projectileSpeed, fastCooldown, slowCooldown, isOverwrite, lifetime));
+                    projectileSpeed, fastCooldown, slowCooldown, isOverwrite, lifetime, List.of()));
         }
         return new SyncCasterStatsPacket(map);
     }

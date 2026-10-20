@@ -2,6 +2,9 @@ package com.fantasyclouds.mage.data;
 
 import com.fantasyclouds.mage.Mage;
 import com.fantasyclouds.mage.network.SyncCasterStatsPacket;
+import com.fantasyclouds.mage.spell.SpellStep;
+import com.fantasyclouds.mage.spell.SpellSteps;
+import com.fantasyclouds.mage.spell.StepDefaults;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonElement;
@@ -16,6 +19,7 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -57,13 +61,13 @@ public class CasterStatsLoader extends SimpleJsonResourceReloadListener {
         String item = json.get("item").getAsString();
         String name = json.has("name") ? json.get("name").getAsString() : null;
         String projectileType = json.has("projectileType") ? json.get("projectileType").getAsString() : "";
-        double ballDamage = json.get("ballDamage").getAsDouble();
-        int ballType = json.get("ballType").getAsInt();
-        double projectileSpeed = json.get("projectileSpeed").getAsDouble();
-        int fastCooldown = json.get("fastCooldown").getAsInt();
-        int slowCooldown = json.get("slowCooldown").getAsInt();
-        boolean isOverwrite = json.get("isOverwrite").getAsBoolean();
-        int lifetime = json.get("lifetime").getAsInt();
+        double ballDamage = json.has("ballDamage") ? json.get("ballDamage").getAsDouble() : 0.0;
+        int ballType = json.has("ballType") ? json.get("ballType").getAsInt() : 0;
+        double projectileSpeed = json.has("projectileSpeed") ? json.get("projectileSpeed").getAsDouble() : 0.0;
+        int fastCooldown = json.has("fastCooldown") ? json.get("fastCooldown").getAsInt() : 0;
+        int slowCooldown = json.has("slowCooldown") ? json.get("slowCooldown").getAsInt() : 0;
+        boolean isOverwrite = json.has("isOverwrite") && json.get("isOverwrite").getAsBoolean();
+        int lifetime = json.has("lifetime") ? json.get("lifetime").getAsInt() : 0;
 
         // 消耗属性完全由 JSON 显式配置：cost:{attribute, amount}；缺 cost 字段 = 无消耗（不扣任何东西）。
         ResourceLocation costAttribute = null;
@@ -73,8 +77,18 @@ public class CasterStatsLoader extends SimpleJsonResourceReloadListener {
             costAttribute = ResourceLocation.tryParse(cost.get("attribute").getAsString());
             costAmount = cost.get("amount").getAsDouble();
         }
+
+        // 有序法术步骤：有 sequence 用它（缺省回落顶层旧字段）；无 sequence = 旧扁平格式折叠成单 projectile 步骤。
+        StepDefaults defaults = new StepDefaults(projectileType, ballDamage, ballType, projectileSpeed, lifetime);
+        List<SpellStep> sequence;
+        if (json.has("sequence") && json.get("sequence").isJsonArray()) {
+            sequence = SpellSteps.parse(json.getAsJsonArray("sequence"), defaults);
+        } else {
+            sequence = List.of(SpellSteps.defaultProjectile(projectileType, ballDamage, ballType, projectileSpeed, lifetime));
+        }
+
         return new CasterStats(item, name, projectileType, ballDamage, ballType, costAttribute, costAmount,
-                projectileSpeed, fastCooldown, slowCooldown, isOverwrite, lifetime);
+                projectileSpeed, fastCooldown, slowCooldown, isOverwrite, lifetime, sequence);
     }
 
     @SubscribeEvent

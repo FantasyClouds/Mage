@@ -4,13 +4,17 @@
   "projectileType": "",
   "ballDamage": 8.0,
   "ballType": 3,
+  "projectileSpeed": 2.0,
+  "lifetime": 40,
   "cost": {
     "attribute": "brutality:max_mana",
     "amount": 10.0
   },
-  "projectileSpeed": 2.0,
   "fastCooldown": 12,
   "slowCooldown": 20,
   "isOverwrite": true,
-  "lifetime": 40
+  "sequence": [
+    { "type": "projectile" },
+    { "type": "split", "count": 3, "spread": 40 }
+  ]
 }

@@ -1,26 +1,18 @@
 package com.fantasyclouds.mage.cast;
 
-import com.fantasyclouds.mage.Mage;
 import com.fantasyclouds.mage.cost.SpellCostManager;
 import com.fantasyclouds.mage.data.CasterRegistry;
 import com.fantasyclouds.mage.data.CasterStats;
-import com.fantasyclouds.mage.entity.SpellBolt;
 import com.fantasyclouds.mage.init.MageEnchantments;
-import net.minecraft.nbt.CompoundTag;
-import net.minecraft.resources.ResourceLocation;
+import com.fantasyclouds.mage.spell.CastContext;
+import com.fantasyclouds.mage.spell.SpellPipeline;
 import net.minecraft.world.InteractionHand;
-import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.EntityType;
-import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.entity.projectile.Projectile;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.event.entity.player.PlayerInteractEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
-import net.minecraftforge.registries.ForgeRegistries;
 
 /**
  * 右键施法入口（还原原 MCR 模组 SpellShootHandlerProcedure 的连发语义）。
@@ -28,12 +20,11 @@ import net.minecraftforge.registries.ForgeRegistries;
  * <p>行为：按住右键 = <b>连发</b>，施法频率由物品冷却限速；每次发射扣消耗资源，资源不足即停。
  * <b>保底冷却</b>：配置 cooldown ≤ 0 时强制用 0.5s 下限，防无冷却配置机枪式扣蓝。
  *
- * <p>弹射物：<b>按配置 {@code projectileType} 生成外部法弹实体</b>（整合包内容视觉保留），
- * 携带 spell_damage / spell_type / spell_enchant_* NBT。命中伤害由
- * {@code ProjectileSpellDamageMixin}（通用 Projectile 接管，零外部依赖）改走
- * {@code SpellDamageHelper} 统一结算（ballDamage + ballType 伤害类型）。
+ * <p>发射：扣耗/冷却通过后走 {@link SpellPipeline}（Noita 式有序步骤），
+ * 弹由 sequence 里的步骤装配（payload + 修饰符），具体生成实体逻辑在
+ * {@code SpellProjectile.launch}（外部弹视觉保留、带 Mage NBT、命中走通用接管）。
  */
-@Mod.EventBusSubscriber(modid = Mage.MODID, bus = Mod.EventBusSubscriber.Bus.FORGE)
+@Mod.EventBusSubscriber(modid = com.fantasyclouds.mage.Mage.MODID, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public class SpellShootHandler {
 
     /** 配置冷却为 0 时的保底下限（tick，0.5s），防无冷却配置每 tick 扣蓝。 */
@@ -67,44 +58,7 @@ public class SpellShootHandler {
         if (cd <= 0) cd = MIN_COOLDOWN_TICKS;
         player.getCooldowns().addCooldown(item.getItem(), cd);
 
-        // 按配置生成弹射物（projectileType 空 → 内置 mage:spell_bolt）
-        summonSpellEntity(level, player, item, stats);
-    }
-
-    private static void summonSpellEntity(Level level, Player player, ItemStack held, CasterStats stats) {
-        EntityType<?> type = stats.projectileType().isEmpty()
-                ? com.fantasyclouds.mage.init.MageEntities.SPELL_BOLT.get()
-                : ForgeRegistries.ENTITY_TYPES.getValue(new ResourceLocation(stats.projectileType()));
-        if (type == null) return;
-        Entity entity = type.create(level);
-        if (entity == null) return;
-
-        if (entity instanceof Projectile projectile) {
-            projectile.setOwner(player);
-        }
-        entity.setNoGravity(true);
-        if (entity instanceof Mob mob) mob.setNoAi(true);
-
-        entity.setPos(player.getX(), player.getEyeY() - 0.1, player.getZ());
-        Vec3 look = player.getLookAngle();
-        double speed = stats.projectileSpeed();
-
-        if (entity instanceof SpellBolt bolt) {
-            bolt.launch(look.scale(speed));
-            bolt.setSpellType(stats.ballType());
-        } else {
-            entity.setDeltaMovement(look.scale(speed));
-        }
-
-        // NBT 存储法术参数（命中由 ProjectileSpellDamageMixin → SpellDamageHelper 统一结算）
-        CompoundTag tag = entity.getPersistentData();
-        tag.putDouble("spell_damage", stats.ballDamage());
-        tag.putInt("spell_type", stats.ballType());
-        tag.putLong("spell_death_time", level.getGameTime() + stats.lifetime());
-        int forceful = held.getEnchantmentLevel(MageEnchantments.FORCEFUL.get());
-        if (forceful > 0) tag.putDouble("spell_enchant_bonus", forceful);
-        if (held.getEnchantmentLevel(MageEnchantments.BURST.get()) > 0) tag.putBoolean("spell_enchant_burst", true);
-
-        level.addFreshEntity(entity);
+        // 走法术流水线：按 sequence 装配弹并统一发射
+        SpellPipeline.cast(new CastContext(level, player, item), stats);
     }
 }
