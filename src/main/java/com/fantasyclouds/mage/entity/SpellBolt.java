@@ -37,6 +37,8 @@ public class SpellBolt extends AbstractHurtingProjectile {
             SynchedEntityData.defineId(SpellBolt.class, EntityDataSerializers.INT);
     private static final EntityDataAccessor<String> DATA_SPELL_VISUAL =
             SynchedEntityData.defineId(SpellBolt.class, EntityDataSerializers.STRING);
+    private static final EntityDataAccessor<Float> DATA_SPELL_YAW_OFFSET =
+            SynchedEntityData.defineId(SpellBolt.class, EntityDataSerializers.FLOAT);
 
     /** 无重力（直线）？默认 true，对应 antigravity 原语（当前主流法术）。projectile 原语为 false 走重力抛物线。 */
     private boolean antigravity = true;
@@ -82,11 +84,21 @@ public class SpellBolt extends AbstractHurtingProjectile {
         return this.entityData.get(DATA_SPELL_VISUAL);
     }
 
+    /** 视觉委托的水平偏角校准（度，0 = 不偏；目标模型自带朝向基准时用来转正）。 */
+    public void setSpellYawOffset(float offset) {
+        this.entityData.set(DATA_SPELL_YAW_OFFSET, offset);
+    }
+
+    public float getSpellYawOffset() {
+        return this.entityData.get(DATA_SPELL_YAW_OFFSET);
+    }
+
     @Override
     protected void defineSynchedData() {
         super.defineSynchedData();
         this.entityData.define(DATA_SPELL_TYPE, 0);
         this.entityData.define(DATA_SPELL_VISUAL, "");
+        this.entityData.define(DATA_SPELL_YAW_OFFSET, 0f);
     }
 
     private boolean isPiercing() {
@@ -130,7 +142,7 @@ public class SpellBolt extends AbstractHurtingProjectile {
             }
         }
 
-        // 拖尾粒子（NBT spell_particle；服务端每 tick 在弹位置发）
+        // 拖尾粒子（NBT spell_particles 列表；服务端每 tick 在弹位置发，可多种）
         spawnTrailParticles(tag);
 
         if (tag.contains("spell_death_time") && this.level().getGameTime() >= tag.getLong("spell_death_time")) {
@@ -138,26 +150,31 @@ public class SpellBolt extends AbstractHurtingProjectile {
         }
     }
 
-    /** 服务端每 tick 发拖尾粒子：粒子类型按注册名查（查不到/客户端静默跳过）。 */
+    /** 服务端每 tick 发拖尾粒子（可多种，遍历 spell_particles 列表；单个粒子坏/查不到静默跳过）。 */
     private void spawnTrailParticles(CompoundTag tag) {
         if (this.level().isClientSide) return;
-        String id = tag.getString("spell_particle");
-        if (id.isEmpty()) return;
-        try {
-            ParticleType<?> type = ForgeRegistries.PARTICLE_TYPES.getValue(new ResourceLocation(id));
-            if (type == null) return;
-            int count = tag.getInt("spell_particle_count");
-            if (count <= 0) count = 2;
-            // 简单粒子直接作为 ParticleOptions；复杂粒子（需 NBT）跳过以免 API 强转错
-            if (type instanceof SimpleParticleType simple) {
-                ((ServerLevel) this.level()).sendParticles(simple,
-                        this.getX(), this.getY(), this.getZ(), count,
-                        this.random.nextDouble() * 0.1 - 0.05,
-                        this.random.nextDouble() * 0.1 - 0.05,
-                        this.random.nextDouble() * 0.1 - 0.05, 0.02);
+        net.minecraft.nbt.ListTag list = tag.getList("spell_particles", net.minecraft.nbt.Tag.TAG_COMPOUND);
+        if (list.isEmpty()) return;
+        for (net.minecraft.nbt.Tag raw : list) {
+            if (!(raw instanceof CompoundTag pt)) continue;
+            String id = pt.getString("id");
+            if (id.isEmpty()) continue;
+            try {
+                ParticleType<?> type = ForgeRegistries.PARTICLE_TYPES.getValue(new ResourceLocation(id));
+                if (type == null) continue;
+                int count = pt.getInt("count");
+                if (count <= 0) count = 2;
+                // 简单粒子直接作为 ParticleOptions；复杂粒子（需 NBT）跳过以免 API 强转错
+                if (type instanceof SimpleParticleType simple) {
+                    ((ServerLevel) this.level()).sendParticles(simple,
+                            this.getX(), this.getY(), this.getZ(), count,
+                            this.random.nextDouble() * 0.1 - 0.05,
+                            this.random.nextDouble() * 0.1 - 0.05,
+                            this.random.nextDouble() * 0.1 - 0.05, 0.02);
+                }
+            } catch (Throwable t) {
+                // 单个粒子异常：跳过，不影响弹
             }
-        } catch (Throwable t) {
-            // 粒子查不到/异常：静默跳过，不影响弹
         }
     }
 

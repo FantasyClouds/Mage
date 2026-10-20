@@ -91,23 +91,32 @@ modid:     mage
 
 ## 视觉委托渲染（用任意模组实体的模型当法术弹）
 
-外观是**修饰属性**，独立成 `visual` 步骤，作用于它之前收集的所有弹；可附加拖尾粒子：
+外观是**修饰属性**，独立成 `visual` 步骤，作用于它之前收集的所有弹；可附加拖尾粒子（**可多种叠加**）：
 
 ```json
-{ "type": "visual", "entity": "lethality:acidic_slash", "particle": "minecraft:flame", "particleCount": 2 }
+{
+  "type": "visual",
+  "entity": "lethality:acidic_slash",
+  "yawOffset": 90,
+  "particles": [
+    { "particle": "lethality:acidic_impact", "count": 3 },
+    { "particle": "lethality:acidic_bubble", "count": 3 }
+  ]
+}
 ```
 
 | 参数 | 说明 |
 |---|---|
 | `entity` | 目标实体注册名；空/查不到 → 回落内置 billboard |
-| `particle` | 拖尾粒子注册名（如 `minecraft:flame`）；空 = 无拖尾 |
-| `particleCount` | 拖尾粒子每次发射数（缺省 2） |
+| `yawOffset` | 视觉水平偏角（度，0 = 不偏）。目标模型自带朝向基准时用来校准（如酸性斩击需 ±90°） |
+| `particles` | 拖尾粒子数组 `[{particle, count}...]`，**追加不覆盖**——多次 visual 步骤可叠多种粒子 |
 
 - 原理：客户端渲染器发现 `spell_visual` 后，创建目标实体的**代理实例**（仅渲染用，不进
   世界、不同步），用目标实体自己的 Renderer 渲染——任意模组的 GeoModel/模型都能显示。
-- 拖尾粒子由服务端每 tick 在弹位置发送（`ServerLevel.sendParticles`），走 `spell_particle` NBT。
-- 目标实体查不到 / 创建失败 / 粒子查不到 → 优雅回落到内置 billboard / 无拖尾，不会崩渲染。
+- 拖尾粒子由服务端每 tick 在弹位置发送（`ServerLevel.sendParticles`），走 `spell_particles` NBT 列表。
+- 目标实体查不到 / 创建失败 / 粒子查不到 → 优雅回落到内置 billboard / 跳过该粒子，不会崩渲染。
 - 语义：视觉与发射解耦——split 复制的每一颗都继承同一外观与拖尾；pierce 不改外观。
+- 多次 visual：`entity` 后写覆盖前写（外观唯一），`particles` 追加（可叠加多种）。
 
 ---
 

@@ -71,11 +71,13 @@ public class SpellBoltRenderer extends EntityRenderer<SpellBolt> {
             Entity proxy = getProxy(type, visual);
             if (proxy == null) return false;
 
-            // 把施法弹的姿态搬给代理：位置/朝向/tick（动画推进对齐）
+            // 把施法弹的姿态搬给代理：位置/朝向/tick（动画推进对齐）。
+            // yawOffset 用于校准目标模型自带的朝向基准（如酸性斩击需 ±90°）
+            float visualYaw = bolt.getYRot() + bolt.getSpellYawOffset();
             proxy.setPos(bolt.getX(), bolt.getY(), bolt.getZ());
-            proxy.setYRot(bolt.getYRot());
+            proxy.setYRot(visualYaw);
             proxy.setXRot(bolt.getXRot());
-            proxy.yRotO = bolt.yRotO;
+            proxy.yRotO = bolt.yRotO + bolt.getSpellYawOffset();
             proxy.xRotO = bolt.xRotO;
             proxy.tickCount = bolt.tickCount;
             if (proxy instanceof Projectile p) {

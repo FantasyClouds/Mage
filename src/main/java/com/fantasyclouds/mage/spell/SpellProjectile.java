@@ -14,6 +14,9 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.registries.ForgeRegistries;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * 流水线中流动的「一颗弹」的最终配置（可变对象，修饰符步骤改它的字段）。
  *
@@ -36,10 +39,10 @@ public class SpellProjectile {
     public int pierceCount;
     /** 视觉委托：目标实体注册名（如 lethality:acidic_slash）。非空时客户端渲染改为委托该实体的 Renderer——模型/动画照搬，兼容任意模组实体。空/查不到 → 默认 billboard。 */
     public String visual = "";
-    /** 拖尾粒子注册名（如 minecraft:flame）；空 = 无拖尾。弹飞行时每 tick 发射。 */
-    public String particle = "";
-    /** 拖尾粒子每次发射数量（缺省 2）。 */
-    public int particleCount = 2;
+    /** 视觉委托的额外水平偏角（度，0 = 不偏）。目标实体模型自带朝向基准时用来校准（如酸性斩击需转 90°）。 */
+    public float yawOffset = 0f;
+    /** 拖尾粒子列表（可叠加多种，如火焰+酸泡同时拖尾）。VisualStep 往这追加，不覆盖。 */
+    public final List<ParticleSpec> particles = new ArrayList<>();
 
     public SpellProjectile(String projectileType, double damage, int ballType, double speed, int lifetime) {
         this(projectileType, damage, ballType, speed, lifetime, true, 0.0);
@@ -63,8 +66,8 @@ public class SpellProjectile {
         SpellProjectile p = new SpellProjectile(projectileType, damage, ballType, speed, lifetime, antigravity, angleOffset);
         p.pierceCount = this.pierceCount;
         p.visual = this.visual;
-        p.particle = this.particle;
-        p.particleCount = this.particleCount;
+        p.yawOffset = this.yawOffset;
+        p.particles.addAll(this.particles);
         return p;
     }
 
@@ -99,6 +102,7 @@ public class SpellProjectile {
             bolt.launch(motion, antigravity);
             bolt.setSpellType(ballType);
             if (visual != null && !visual.isEmpty()) bolt.setSpellVisual(visual);
+            if (yawOffset != 0f) bolt.setSpellYawOffset(yawOffset);
         } else {
             entity.setDeltaMovement(motion);
         }
@@ -109,9 +113,17 @@ public class SpellProjectile {
         tag.putLong("spell_death_time", level.getGameTime() + lifetime);
         if (pierceCount > 0) tag.putInt("spell_pierce", pierceCount);
         if (visual != null && !visual.isEmpty()) tag.putString("spell_visual", visual);
-        if (particle != null && !particle.isEmpty()) {
-            tag.putString("spell_particle", particle);
-            tag.putInt("spell_particle_count", Math.max(1, particleCount));
+        if (yawOffset != 0f) tag.putFloat("spell_yaw_offset", yawOffset);
+        // 拖尾粒子列表（多种可共存）→ spell_particles 复合列表
+        if (!particles.isEmpty()) {
+            net.minecraft.nbt.ListTag list = new net.minecraft.nbt.ListTag();
+            for (ParticleSpec spec : particles) {
+                CompoundTag pt = new CompoundTag();
+                pt.putString("id", spec.id());
+                pt.putInt("count", spec.count());
+                list.add(pt);
+            }
+            tag.put("spell_particles", list);
         }
         int forceful = ctx.held.getEnchantmentLevel(MageEnchantments.FORCEFUL.get());
         if (forceful > 0) tag.putDouble("spell_enchant_bonus", forceful);
