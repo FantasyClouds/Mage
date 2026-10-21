@@ -14,6 +14,9 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.OwnableEntity;
+import net.minecraft.world.entity.monster.Enemy;
 import net.minecraft.world.entity.projectile.AbstractHurtingProjectile;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.AABB;
@@ -33,6 +36,12 @@ import java.util.UUID;
  * - 类型着色：spell_type 走 SynchedEntityData 同步给客户端渲染；
  * - 穿透：NBT {@code spell_pierce} > 0 时进入穿透模式——穿过实体/方块不消失、每实体只结算一次
  *   （UUID 去重）、命中 {@code count} 个后消失。参考 lethality AcidicSlashEntity。
+ * - 追踪：NBT {@code spell_homing} > 0 时锁定范围内最近的可锁目标转向（度/tick 由 spell_homing_turn）；
+ *   {@code spell_homing_hostile}=true（缺省）只锁敌对（Enemy ∪ 对施法者仇恨），false 也锁中立/被动，
+ *   施法者驯养生物（OwnableEntity）在任何模式下都恒被排除。
+ * - 反弹：NBT {@code spell_bounce} > 0 时撞方块按碰撞面反射（轴对齐面上等价 conjurer 逐轴取反）。
+ *   受重力（projectile）：保底起跳 vy + 能量耗尽消失，防贴地抖动；无重力（antigravity）：完美反射
+ *   速度不衰减，靠 count / 生命时间结束。参考 conjurer_illager BouncingBallEntity。
  */
 public class SpellBolt extends AbstractHurtingProjectile {
 
@@ -90,6 +99,15 @@ public class SpellBolt extends AbstractHurtingProjectile {
     private static final double GRAVITY = 0.04;
     /** 穿透模式每 tick 扫描半径（不含弹本体碰撞箱）。 */
     private static final double PIERCE_RADIUS = 0.9;
+    /** 受重力弹反弹后的最小垂直分量（起跳速度）。conjurer 用反弹次数上限兜底贴地抖动；
+     *  我们给落地/碰顶反弹后一个最小 vy，保证弹真正离面，不会贴地逐 tick 反复撞。 */
+    private static final double MIN_BOUNCE_VY = 0.15;
+    /** 反弹后速度低于该长度阈值 = 弹球能量耗尽（受重力模式）→ 直接消失而非贴地抖动。 */
+    private static final double MIN_BOUNCE_SPEED = 0.06;
+    /** 受重力弹每次碰撞的恢复系数（restitution）：导弹速乘该系数 → 越弹越矮。
+     *  conjurer BouncingBall 靠 ThrowableProjectile 惯性 0.99 达成同理衰减；我们没有全局惯性
+     *  （getInertia=1.0），故在反弹点显式损失能量。无重力弹不做衰减（保持完美反射）。 */
+    private static final double BOUNCE_RESTITUTION = 0.8;
 
     public void setSpellType(int type) {
         this.entityData.set(DATA_SPELL_TYPE, type);
@@ -182,18 +200,20 @@ public class SpellBolt extends AbstractHurtingProjectile {
         }
     }
 
-    /** 追踪：锁定范围内最近的非 owner 实体，把 deltaMovement 向它转 homingTurn 度（单位=格，度/tick）。 */
+    /** 追踪：锁定范围内最近的可锁目标，把 deltaMovement 向它转 homingTurn 度（单位=格，度/tick）。
+     *  可锁性由 spell_homing_hostile 控制过滤（false 时非敌对也对准，驯养物仍排除）。 */
     private void doHoming(CompoundTag tag) {
         double range = tag.getDouble("spell_homing");
         double turnDeg = tag.getDouble("spell_homing_turn");
         if (turnDeg <= 0) turnDeg = 15.0;
         Entity owner = this.getOwner();
+        boolean hostileOnly = !tag.contains("spell_homing_hostile") || tag.getBoolean("spell_homing_hostile");
         Vec3 pos = this.position();
         AABB box = this.getBoundingBox().inflate(range);
         LivingEntity target = null;
         double best = range * range;
         for (LivingEntity e : this.level().getEntitiesOfClass(LivingEntity.class, box,
-                e -> e != owner && e.isAlive())) {
+                e -> e != owner && e.isAlive() && isLockable(e, owner, hostileOnly))) {
             double d = e.distanceToSqr(this);
             if (d < best) { best = d; target = e; }
         }
@@ -217,6 +237,29 @@ public class SpellBolt extends AbstractHurtingProjectile {
                 (float) axis.x, (float) axis.y, (float) axis.z);
         Vec3 newDir = curDir.rotate(quat).normalize();
         this.setDeltaMovement(newDir.scale(speed));
+    }
+
+    /** 追踪候选资格：始终排除 = owner 自己 + 被施法者驯养/所属的生物（宠/坐骑）。
+     *  hostileOnly=false 时空放其余一切生物；hostileOnly=true 时只放「敌对」：
+     *  ① Enemy（原版怪物接口：僵尸/骷髅/苦力怕等）→「所有 Mob 敌对种类」；
+     *  ② 对主人/施法者有仇恨：getTarget()==owner（正追着打你）或 lastHurtByMob()==owner（刚被你打）。 */
+    private static boolean isLockable(Entity candidate, Entity owner, boolean hostileOnly) {
+        if (owner != null && isOwnedBy(candidate, owner)) return false;
+        if (!hostileOnly) return true;
+        if (candidate instanceof Enemy) return true;
+        if (candidate instanceof Mob mob && owner != null) {
+            if (mob.getTarget() == owner) return true;
+            if (mob.getLastHurtByMob() == owner) return true;
+        }
+        return false;
+    }
+
+    /** 是否属于施法者驯养/所属（OwnableEntity = 原版可被玩家驯养/骑乘：马/狼/猫/鹦鹉…）。
+     *  owner 传 null 时按未驯养处理（无主的兜底不锁敌对判定里已有 Enemy 分支）。 */
+    private static boolean isOwnedBy(Entity candidate, Entity owner) {
+        if (!(candidate instanceof OwnableEntity owned) || owner == null) return false;
+        UUID ownerUuid = owned.getOwnerUUID();
+        return ownerUuid != null && ownerUuid.equals(owner.getUUID());
     }
 
     /** 服务端每 tick 发拖尾粒子（可多种，遍历 spell_particles 列表；单个粒子坏/查不到静默跳过）。 */
@@ -290,16 +333,32 @@ public class SpellBolt extends AbstractHurtingProjectile {
         CompoundTag tag = this.getPersistentData();
         if (isPiercing()) return; // 穿透：穿墙不消失
 
-        // 反弹（NBT spell_bounce > 0）：沿碰撞面法线反射速度，继续飞；次数耗尽才消失
+        // 反弹（NBT spell_bounce > 0）：撞方块反射速度，继续飞；次数耗尽/能量耗尽(仅受重力)才消失。
         int bounces = tag.getInt("spell_bounce");
         if (bounces > 0) {
             Direction face = result.getDirection();
-            Vec3 normal = new Vec3(face.getStepX(), face.getStepY(), face.getStepZ());
             Vec3 motion = this.getDeltaMovement();
+            // 轴对齐方块面：法线反射 = conjurer 式「逐轴取反」（BouncingBallEntity 同款：
+            // EAST/WEST 翻 x、SOUTH/NORTH 翻 z、UP/DOWN 翻 y），两种重力模式共用同一反射公式
+            // （conjurer 球受重力在 1.20 也是这套）。真正的模式差异在后处理：
+            Vec3 normal = new Vec3(face.getStepX(), face.getStepY(), face.getStepZ());
             double dot = motion.dot(normal);
             Vec3 reflected = motion.subtract(normal.scale(2.0 * dot));
+            if (!this.antigravity) {
+                // 受重力：碰撞损失能量（恢复系数）→ 越弹越矮，最终能量耗尽消失（conjurer 用惯性
+                // 0.99 达成同理效果）。保底起跳 vy 防贴地板逐 tick 反复撞（conjurer 用 20/5 上限）。
+                reflected = reflected.scale(BOUNCE_RESTITUTION);
+                if (face.getAxis() == Direction.Axis.Y && Math.abs(reflected.y) < MIN_BOUNCE_VY) {
+                    reflected = new Vec3(reflected.x,
+                            reflected.y >= 0 ? MIN_BOUNCE_VY : -MIN_BOUNCE_VY, reflected.z);
+                }
+                if (reflected.lengthSqr() < MIN_BOUNCE_SPEED * MIN_BOUNCE_SPEED) {
+                    this.discard();
+                    return;
+                }
+            }
+            // 无重力：完美镜面反射，速度不衰减 → 直线弹撞墙折返，靠 count 耗尽/生命时间消失。
             this.setDeltaMovement(reflected);
-            // 把弹推出碰撞面，避免同一 tick 再撞同一面
             this.setPos(this.getX() + normal.x() * 0.05, this.getY() + normal.y() * 0.05, this.getZ() + normal.z() * 0.05);
             tag.putInt("spell_bounce", bounces - 1);
             // 命中即结算范围伤害（若配了 area），然后反射继续飞

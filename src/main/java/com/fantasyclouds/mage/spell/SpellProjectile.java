@@ -41,6 +41,8 @@ public class SpellProjectile {
     public double homingRange = 0;
     /** 追踪转向速率（每 tick 转向角度，度；值越大转得越急）。 */
     public double homingTurn = 0;
+    /** 追踪是否只锁敌对目标（缺省 true）：true=nearest Enemy ∪ aggro；false=也锁中立/被动，但仍剔除驯养物。 */
+    public boolean homingHostileOnly = true;
     /** 范围爆裂：>0 时命中后对命中点半径内所有实体造成范围伤害（AreaStep）；单位=格。 */
     public double areaRadius = 0;
     /** 反弹：>0 时撞方块按碰撞面反射速度继续飞，count 次后消失（BounceStep）。 */
@@ -78,6 +80,7 @@ public class SpellProjectile {
         p.particles.addAll(this.particles);
         p.homingRange = this.homingRange;
         p.homingTurn = this.homingTurn;
+        p.homingHostileOnly = this.homingHostileOnly;
         p.areaRadius = this.areaRadius;
         p.bounceCount = this.bounceCount;
         return p;
@@ -127,6 +130,7 @@ public class SpellProjectile {
         if (homingRange > 0) {
             tag.putDouble("spell_homing", homingRange);
             if (homingTurn > 0) tag.putDouble("spell_homing_turn", homingTurn);
+            tag.putBoolean("spell_homing_hostile", homingHostileOnly);
         }
         if (areaRadius > 0) tag.putDouble("spell_area", areaRadius);
         if (bounceCount > 0) tag.putInt("spell_bounce", bounceCount);
