@@ -96,7 +96,7 @@ public class Mage {
 
     /** 把 Mage 物品挂进原版「材料」标签页（不再有独立 Mage 创造标签）。 */
     private void addItemsToMaterialTab(final BuildCreativeModeTabContentsEvent event) {
-        if (event.getTabKey() == CreativeModeTabs.MATERIALS) {
+        if (event.getTabKey() == CreativeModeTabs.INGREDIENTS) {
             event.accept(TEST_STAFF.get());
             event.accept(MAGIC_CANDY.get());
             event.accept(MANA_ITEM.get());
