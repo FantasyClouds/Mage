@@ -74,13 +74,15 @@ public class SpellBolt extends AbstractHurtingProjectile {
         super(type, level);
     }
 
-    /** 发射：同时设置 deltaMovement 与 x/y/zPower（后者是本类 tick 的实际驱动源）。 */
+    /** 发射：只设 deltaMovement，x/y/zPower 保持 0。
+     *  AbstractHurtingProjectile.tick 每 tick 做 deltaMovement += (xPower,yPower,zPower)（原版持续推进机制）；
+     *  若把 xPower 设成发射速度 = 每 tick 累加一次初速 → 越飞越快（反弹后暴涨）。纯 deltaMovement 驱动速度恒定。 */
     public void launch(Vec3 movement, boolean antigravity) {
         this.antigravity = antigravity;
         this.setDeltaMovement(movement);
-        this.xPower = movement.x;
-        this.yPower = movement.y;
-        this.zPower = movement.z;
+        this.xPower = 0;
+        this.yPower = 0;
+        this.zPower = 0;
         // 同步发射方向到客户端（单位向量）——视觉代理/目标 renderer 需要它算朝向
         double len = movement.length();
         this.entityData.set(DATA_SPELL_DIR_X, (float) (len > 0 ? movement.x / len : 0));
@@ -153,9 +155,10 @@ public class SpellBolt extends AbstractHurtingProjectile {
 
     @Override
     public void tick() {
+        // 受重力：super.tick 前直接改 deltaMovement（每 tick 沿 Y 减 GRAVITY）。
+        // x/y/zPower 恒 0（launch 不设），AbstractHurtingProjectile.tick 的
+        // deltaMovement += (xPower,yPower,zPower) 不叠加，重力只生效一次。
         if (!this.level().isClientSide && !this.antigravity) {
-            // 受重力抛物线：每 tick 沿 Y 减速度（xPower 机制在 super.tick 会从 deltaMovement/xPower 重设速度）
-            this.yPower -= GRAVITY;
             this.setDeltaMovement(this.getDeltaMovement().add(0, -GRAVITY, 0));
         }
         super.tick();

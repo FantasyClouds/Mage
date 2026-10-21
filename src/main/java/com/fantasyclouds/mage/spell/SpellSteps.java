@@ -43,9 +43,9 @@ public final class SpellSteps {
             }
             String type = obj.get("type").getAsString();
             SpellStep step = switch (type) {
-                // projectile=受重力（抛物线）；antigravity=无重力（直线，当前主流）
+                // projectile=唯一的 payload（定义弹：速度/伤害/类型/寿命）；antigravity=修饰符（无重力标记，无 payload 属性）
                 case "projectile" -> new ProjectileStep(obj, defs, false);
-                case "antigravity" -> new ProjectileStep(obj, defs, true);
+                case "antigravity" -> new AntigravityStep(obj);
                 case "split" -> new SplitStep(obj);
                 case "pierce" -> new PierceStep(obj);
                 case "visual" -> new VisualStep(obj);

@@ -3,14 +3,12 @@ package com.fantasyclouds.mage.spell;
 import com.google.gson.JsonObject;
 
 /**
- * 基础发射步骤（payload）：定义一颗弹的默认属性，推入 CastContext 待发射列表。
- * 通常出现在 sequence 开头；其后修饰符步骤对它（们）叠加改造。
+ * 唯一的 payload 发射步骤：定义一颗弹的全部属性（类型/伤害/速度/寿命），推入 CastContext
+ * 待发射列表。通常出现在 sequence 开头；其后修饰符步骤（split/pierce/homing/area/bounce/
+ * antigravity/visual）对它（们）叠加改造。
  *
- * <p>两个原语共用本类，仅 {@code antigravity} 不同：
- * <ul>
- *   <li>{@code projectile}：受重力（抛物线），antigravity=false，默认</li>
- *   <li>{@code antigravity}：无重力（直线，当前主流法术），antigravity=true</li>
- * </ul>
+ * <p><b>无重力不是本步骤的原语</b>：弹默认受重力（抛物线）；要直线弹用独立修饰符步骤
+ * {@code {"type":"antigravity"}}（AntigravityStep）——修饰符不带 speed 等 payload 属性。
  *
  * <p>JSON 参数（均可缺省，缺省先回落 {@link StepDefaults} 再取本体默认）：
  * <ul>
