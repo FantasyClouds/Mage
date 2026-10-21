@@ -26,6 +26,5 @@
   "item.minecraft.potion.effect.magic_damage_boost_plus": "法力增幅药水",
   "item.minecraft.splash_potion.effect.magic_damage_boost_plus": "喷溅型法力增幅药水",
   "item.minecraft.lingering_potion.effect.magic_damage_boost_plus": "滞留型法力增幅药水",
-  "item.minecraft.tipped_arrow.effect.magic_damage_boost_plus": "法力增幅之箭",
-  "itemGroup.mage_tab": "Mage 法术"
+  "item.minecraft.tipped_arrow.effect.magic_damage_boost_plus": "法力增幅之箭"
 }

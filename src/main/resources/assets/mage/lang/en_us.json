@@ -17,6 +17,5 @@
   "effect.mage.magic_boost": "Magic Boost",
   "item.minecraft.potion.effect.magic_damage_boost": "Potion of Magic Boost",
   "item.minecraft.potion.effect.magic_damage_boost_long": "Potion of Magic Boost",
-  "item.minecraft.potion.effect.magic_damage_boost_plus": "Potion of Magic Boost",
-  "itemGroup.mage_tab": "Mage Spells"
+  "item.minecraft.potion.effect.magic_damage_boost_plus": "Potion of Magic Boost"
 }
