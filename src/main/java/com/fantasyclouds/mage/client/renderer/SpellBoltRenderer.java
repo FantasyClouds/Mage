@@ -93,10 +93,14 @@ public class SpellBoltRenderer extends EntityRenderer<SpellBolt> {
                 p.setOwner(bolt.getOwner()); // bolt 本身即 Projectile（SpellBolt 继承 AbstractHurtingProjectile）
             }
 
-            // 用目标实体自己的 Renderer 渲染（模型/动画/贴图全由它负责）
+            // 用目标实体自己的 Renderer 渲染（模型/动画/贴图全由它负责）。
+            // ⚠️ 必须传 proxy 的 visualYaw/visualPitch 而非外层 bolt 的 yaw：
+            // EntityRenderer 基类（MobRenderer.applyRotations）用这个 rotationYaw 对模型做基础旋转，
+            // 子类（如 AcidicSlashRenderer）再从 deltaMovement 叠加朝向——两层都基于传入的 yaw。
+            // 传错（bolt 的 yaw）→ 基础旋转与 proxy.yRot/deltaMovement 不一致 → 整体朝向错。
             EntityRenderer renderer = Minecraft.getInstance().getEntityRenderDispatcher().getRenderer(proxy);
             if (renderer instanceof SpellBoltRenderer) return false; // 目标自己也是 SpellBolt → 防递归
-            renderer.render(proxy, yaw, partialTick, pose, buffer, light);
+            renderer.render(proxy, visualYaw, partialTick, pose, buffer, light);
             return true;
         } catch (Throwable t) {
             // 代理创建/渲染异常：优雅回落 billboard，不炸渲染线程
