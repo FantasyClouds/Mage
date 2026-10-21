@@ -6,6 +6,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.projectile.Projectile;
 import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.phys.HitResult;
+import net.minecraft.world.phys.Vec3;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -48,7 +49,13 @@ public abstract class ProjectileSpellDamageMixin {
         if (!(result instanceof EntityHitResult entityHit)) return; // 只接管命中实体
 
         Entity owner = self.getOwner();
-        SpellDamageHelper.applySpellDamage(self.level(), entityHit.getEntity(), owner != null ? owner : self, self);
+        Entity source = owner != null ? owner : self;
+        SpellDamageHelper.applySpellDamage(self.level(), entityHit.getEntity(), source, self);
+        // 范围爆裂（AreaStep）：外部弹同样支持——命中点半径内范围伤害
+        if (tag.getDouble("spell_area") > 0) {
+            Vec3 at = entityHit.getEntity().position();
+            SpellDamageHelper.applyAreaDamage(self.level(), at, source, tag);
+        }
         self.discard();
         ci.cancel();
     }

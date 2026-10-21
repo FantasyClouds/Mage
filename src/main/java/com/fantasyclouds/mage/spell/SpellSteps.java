@@ -49,6 +49,9 @@ public final class SpellSteps {
                 case "split" -> new SplitStep(obj);
                 case "pierce" -> new PierceStep(obj);
                 case "visual" -> new VisualStep(obj);
+                case "homing" -> new HomingStep(obj);
+                case "area" -> new AreaStep(obj);
+                case "bounce" -> new BounceStep(obj);
                 default -> {
                     LOGGER.warn("[MageCaster] unknown spell step type '{}', skipped", type);
                     yield null;

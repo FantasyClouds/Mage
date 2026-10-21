@@ -1,6 +1,7 @@
 package com.fantasyclouds.mage.entity;
 
 import com.fantasyclouds.mage.cast.SpellDamageHelper;
+import net.minecraft.core.Direction;
 import net.minecraft.core.particles.ParticleType;
 import net.minecraft.core.particles.SimpleParticleType;
 import net.minecraft.nbt.CompoundTag;
@@ -9,6 +10,7 @@ import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
@@ -19,6 +21,7 @@ import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.registries.ForgeRegistries;
+import org.joml.Quaternionf;
 
 import java.util.UUID;
 
@@ -166,12 +169,54 @@ public class SpellBolt extends AbstractHurtingProjectile {
             }
         }
 
+        // 追踪（NBT spell_homing > 0）：每 tick 向范围内最近非施法者目标转向
+        if (tag.getDouble("spell_homing") > 0) {
+            doHoming(tag);
+        }
+
         // 拖尾粒子（NBT spell_particles 列表；服务端每 tick 在弹位置发，可多种）
         spawnTrailParticles(tag);
 
         if (tag.contains("spell_death_time") && this.level().getGameTime() >= tag.getLong("spell_death_time")) {
             this.discard();
         }
+    }
+
+    /** 追踪：锁定范围内最近的非 owner 实体，把 deltaMovement 向它转 homingTurn 度（单位=格，度/tick）。 */
+    private void doHoming(CompoundTag tag) {
+        double range = tag.getDouble("spell_homing");
+        double turnDeg = tag.getDouble("spell_homing_turn");
+        if (turnDeg <= 0) turnDeg = 15.0;
+        Entity owner = this.getOwner();
+        Vec3 pos = this.position();
+        AABB box = this.getBoundingBox().inflate(range);
+        LivingEntity target = null;
+        double best = range * range;
+        for (LivingEntity e : this.level().getEntitiesOfClass(LivingEntity.class, box,
+                e -> e != owner && e.isAlive())) {
+            double d = e.distanceToSqr(this);
+            if (d < best) { best = d; target = e; }
+        }
+        if (target == null) return;
+
+        Vec3 current = this.getDeltaMovement();
+        double speed = current.length();
+        if (speed < 1.0E-6) return;
+        Vec3 curDir = current.scale(1.0 / speed);
+        Vec3 wanted = target.getEyePosition().subtract(pos).normalize();
+
+        double dot = Mth.clamp(curDir.dot(wanted), -1.0, 1.0);
+        double angleDeg = Math.acos(dot) * 180.0 / Math.PI;
+        if (angleDeg < 0.01 || angleDeg >= 179.0) return; // 已对准 / 背对（axis 退化）都不转
+
+        double step = Math.min(turnDeg, angleDeg);
+        Vec3 axis = curDir.cross(wanted);
+        if (axis.lengthSqr() < 1.0E-8) return;
+        axis = axis.normalize();
+        Quaternionf quat = new Quaternionf().rotationAxis((float) Math.toRadians(step),
+                (float) axis.x, (float) axis.y, (float) axis.z);
+        Vec3 newDir = curDir.rotate(quat).normalize();
+        this.setDeltaMovement(newDir.scale(speed));
     }
 
     /** 服务端每 tick 发拖尾粒子（可多种，遍历 spell_particles 列表；单个粒子坏/查不到静默跳过）。 */
@@ -225,9 +270,15 @@ public class SpellBolt extends AbstractHurtingProjectile {
             return;
         }
         Entity owner = this.getOwner();
-        SpellDamageHelper.applySpellDamage(this.level(), result.getEntity(), owner != null ? owner : this, this);
+        CompoundTag tag = this.getPersistentData();
+        Entity source = owner != null ? owner : this;
+        SpellDamageHelper.applySpellDamage(this.level(), result.getEntity(), source, this);
+        // 范围爆裂（AreaStep）：命中点半径内所有实体范围伤害
+        if (tag.getDouble("spell_area") > 0) {
+            SpellDamageHelper.applyAreaDamage(this.level(), result.getEntity().position(), source, tag);
+        }
         // 爆裂法术（mage:burst）：命中点燃目标 10 秒（复刻 adventuresmod BURST 行为）
-        if (this.getPersistentData().getBoolean("spell_enchant_burst")) {
+        if (tag.getBoolean("spell_enchant_burst")) {
             result.getEntity().setSecondsOnFire(10);
         }
         this.discard();
@@ -236,7 +287,34 @@ public class SpellBolt extends AbstractHurtingProjectile {
     @Override
     protected void onHitBlock(BlockHitResult result) {
         if (this.level().isClientSide) return;
+        CompoundTag tag = this.getPersistentData();
         if (isPiercing()) return; // 穿透：穿墙不消失
+
+        // 反弹（NBT spell_bounce > 0）：沿碰撞面法线反射速度，继续飞；次数耗尽才消失
+        int bounces = tag.getInt("spell_bounce");
+        if (bounces > 0) {
+            Direction face = result.getDirection();
+            Vec3 normal = new Vec3(face.getStepX(), face.getStepY(), face.getStepZ());
+            Vec3 motion = this.getDeltaMovement();
+            double dot = motion.dot(normal);
+            Vec3 reflected = motion.subtract(normal.scale(2.0 * dot));
+            this.setDeltaMovement(reflected);
+            // 把弹推出碰撞面，避免同一 tick 再撞同一面
+            this.setPos(this.getX() + normal.x() * 0.05, this.getY() + normal.y() * 0.05, this.getZ() + normal.z() * 0.05);
+            tag.putInt("spell_bounce", bounces - 1);
+            // 命中即结算范围伤害（若配了 area），然后反射继续飞
+            if (tag.getDouble("spell_area") > 0) {
+                Entity owner = this.getOwner();
+                SpellDamageHelper.applyAreaDamage(this.level(), this.position(), owner != null ? owner : this, tag);
+            }
+            return;
+        }
+
+        // 非反弹非穿透：命中结算范围伤害（若配了 area）后消失
+        if (tag.getDouble("spell_area") > 0) {
+            Entity owner = this.getOwner();
+            SpellDamageHelper.applyAreaDamage(this.level(), this.position(), owner != null ? owner : this, tag);
+        }
         this.discard();
     }
 

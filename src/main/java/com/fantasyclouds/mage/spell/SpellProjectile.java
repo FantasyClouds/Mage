@@ -37,6 +37,14 @@ public class SpellProjectile {
     public double angleOffset;
     /** 穿透数：>0 时弹穿墙不消失、每实体只结算一次，命中 count 个后消失（PierceStep 累加）。 */
     public int pierceCount;
+    /** 追踪：>0 时每 tick 向范围内最近目标转向（HomingStep）；单位=格。 */
+    public double homingRange = 0;
+    /** 追踪转向速率（每 tick 转向角度，度；值越大转得越急）。 */
+    public double homingTurn = 0;
+    /** 范围爆裂：>0 时命中后对命中点半径内所有实体造成范围伤害（AreaStep）；单位=格。 */
+    public double areaRadius = 0;
+    /** 反弹：>0 时撞方块按碰撞面反射速度继续飞，count 次后消失（BounceStep）。 */
+    public int bounceCount = 0;
     /** 视觉委托：目标实体注册名（如 lethality:acidic_slash）。非空时客户端渲染改为委托该实体的 Renderer——模型/动画照搬，兼容任意模组实体。空/查不到 → 默认 billboard。 */
     public String visual = "";
     /** 视觉委托的额外水平偏角（度，0 = 不偏）。目标实体模型自带朝向基准时用来校准（如酸性斩击需转 90°）。 */
@@ -68,6 +76,10 @@ public class SpellProjectile {
         p.visual = this.visual;
         p.yawOffset = this.yawOffset;
         p.particles.addAll(this.particles);
+        p.homingRange = this.homingRange;
+        p.homingTurn = this.homingTurn;
+        p.areaRadius = this.areaRadius;
+        p.bounceCount = this.bounceCount;
         return p;
     }
 
@@ -112,6 +124,12 @@ public class SpellProjectile {
         tag.putInt("spell_type", ballType);
         tag.putLong("spell_death_time", level.getGameTime() + lifetime);
         if (pierceCount > 0) tag.putInt("spell_pierce", pierceCount);
+        if (homingRange > 0) {
+            tag.putDouble("spell_homing", homingRange);
+            if (homingTurn > 0) tag.putDouble("spell_homing_turn", homingTurn);
+        }
+        if (areaRadius > 0) tag.putDouble("spell_area", areaRadius);
+        if (bounceCount > 0) tag.putInt("spell_bounce", bounceCount);
         if (visual != null && !visual.isEmpty()) tag.putString("spell_visual", visual);
         if (yawOffset != 0f) tag.putFloat("spell_yaw_offset", yawOffset);
         // 拖尾粒子列表（多种可共存）→ spell_particles 复合列表

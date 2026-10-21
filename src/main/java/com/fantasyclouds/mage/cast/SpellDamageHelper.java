@@ -11,7 +11,10 @@ import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LevelAccessor;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.Map;
 
@@ -45,6 +48,25 @@ public class SpellDamageHelper {
     /** 直接数值结算（给后续无需弹射物的用法）。 */
     public static void applySpellDamageFromValues(LevelAccessor world, Entity target, Entity source, double baseDamage, int type) {
         applyDamage(world, target, source, withMagicBoost(source, baseDamage), type);
+    }
+
+    /**
+     * 范围爆裂结算（AreaStep）：对 center 半径 {@code spell_area} 内所有 LivingEntity
+     * （排除 source/owner）逐个结算魔法伤害。伤害从弹 NBT 读（spell_damage + spell_enchant_bonus）。
+     * 走本类统一魔法结算 → 吃 L2 法伤属性。type==5 的减速/再生副作用同样逐目标给出。
+     */
+    public static void applyAreaDamage(Level level, Vec3 center, Entity source, CompoundTag tag) {
+        if (level == null || center == null || source == null || tag == null || level.isClientSide) return;
+        double radius = tag.getDouble("spell_area");
+        if (radius <= 0) return;
+        double damage = tag.getDouble("spell_damage") + tag.getDouble("spell_enchant_bonus");
+        if (damage <= 0) return;
+        int type = tag.getInt("spell_type");
+
+        AABB box = new AABB(center, center).inflate(radius);
+        for (LivingEntity target : level.getEntitiesOfClass(LivingEntity.class, box, e -> e != source && e.isAlive())) {
+            applyDamage(level, target, source, withMagicBoost(source, damage), type);
+        }
     }
 
     /** 法力增幅药水加成（迁移自 SOFL SpellDamageUtil）：伤害 +（amplifier+1）。 */
