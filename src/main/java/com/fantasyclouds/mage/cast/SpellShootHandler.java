@@ -48,8 +48,9 @@ public class SpellShootHandler {
         // 冷却门控（保险；正常时 Forge 已不触发冷却中的事件）
         if (player.getCooldowns().isOnCooldown(item.getItem())) return;
 
-        // 资源足够才施法（先查不扣；真正施法成功后才 consume——"没真正施法不扣蓝"）
-        if (!SpellCostManager.canAfford(player, stats.costAttribute(), stats.costAmount())) return;
+        // 资源足够才施法（先查不扣；真正施法成功后才 consume——"没真正施法不扣蓝"）。
+        // 蓝不足时自动吃背包魔法糖果补蓝再判（恢复 SOFL RemoveManaProcedure 兜底行为）。
+        if (!SpellCostManager.affordWithCandy(player, stats.costAttribute(), stats.costAmount())) return;
 
         // 走法术流水线：按 sequence 装配弹并统一发射（返回是否有弹真正生成）
         boolean cast = SpellPipeline.cast(new CastContext(level, player, item), stats);

@@ -86,8 +86,9 @@ public class SpellProjectile {
         return p;
     }
 
-    /** 实际生成实体（外部弹保留视觉；内置弹走 SpellBolt）。NBT 协议与迁移前一致。 */
-    public void launch(CastContext ctx) {
+    /** 实际生成实体（外部弹保留视觉；内置弹走 SpellBolt）。NBT 协议与迁移前一致。
+     *  @return 弹是否真正生成并加入世界（false = 实体类型无效/创建失败 → 调用方不扣蓝）。 */
+    public boolean launch(CastContext ctx) {
         Level level = ctx.level;
         Player player = ctx.player;
 
@@ -95,9 +96,15 @@ public class SpellProjectile {
         EntityType<?> type = projectileType == null || projectileType.isEmpty()
                 ? MageEntities.SPELL_BOLT.get()
                 : ForgeRegistries.ENTITY_TYPES.getValue(new ResourceLocation(projectileType));
-        if (type == null) return;
+        if (type == null) {
+            com.fantasyclouds.mage.Mage.LOGGER.warn("[MageCaster] unknown projectileType '{}', bolt not spawned", projectileType);
+            return false;
+        }
         Entity entity = type.create(level);
-        if (entity == null) return;
+        if (entity == null) {
+            com.fantasyclouds.mage.Mage.LOGGER.warn("[MageCaster] entity create failed for '{}', bolt not spawned", projectileType);
+            return false;
+        }
 
         if (entity instanceof Projectile projectile) projectile.setOwner(player);
         entity.setNoGravity(antigravity);
@@ -152,6 +159,7 @@ public class SpellProjectile {
         if (ctx.held.getEnchantmentLevel(MageEnchantments.BURST.get()) > 0) tag.putBoolean("spell_enchant_burst", true);
 
         level.addFreshEntity(entity);
+        return true;
     }
 
     /** 玩家视线向量绕 Y 轴旋转 angleOffset 后的方向。 */

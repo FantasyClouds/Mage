@@ -2,6 +2,7 @@ package com.fantasyclouds.mage.cost;
 
 import com.fantasyclouds.mage.Config;
 import com.fantasyclouds.mage.Mage;
+import com.fantasyclouds.mage.item.MagicCandyItem;
 import com.fantasyclouds.mage.util.AttributeModifierHelper;
 import com.fantasyclouds.mage.util.ModifierUUIDs;
 import net.minecraft.nbt.CompoundTag;
@@ -9,6 +10,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.ai.attributes.Attribute;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
@@ -81,6 +83,29 @@ public class SpellCostManager {
     public static boolean tryConsume(Player player, ResourceLocation costAttribute, double amount) {
         if (!canAfford(player, costAttribute, amount)) return false;
         return consume(player, costAttribute, amount);
+    }
+
+    /**
+     * 魔法糖果自动服用兜底（恢复 SOFL RemoveManaProcedure 原行为）：蓝不住却要施法时，
+     * 自动从背包找魔法糖果吃一颗（+40 蓝），重新判定是否足够。零依赖：按物品注册名匹配——
+     * {@code mage:magic_candy}（本模组）/ {@code story_of_forgotten_land:magic_candy}（SOFL）。
+     *
+     * @return 是否「吃糖后」足够施法（含本不需要糖果就够的情况）。
+     */
+    public static boolean affordWithCandy(Player player, ResourceLocation costAttribute, double amount) {
+        if (canAfford(player, costAttribute, amount)) return true; // 本身够，无需吃糖
+        for (int i = 0; i < player.getInventory().getContainerSize(); i++) {
+            ItemStack stack = player.getInventory().getItem(i);
+            if (stack.isEmpty()) continue;
+            ResourceLocation key = ForgeRegistries.ITEMS.getKey(stack.getItem());
+            if (key == null) continue;
+            String id = key.toString();
+            if (!id.equals("mage:magic_candy") && !id.equals("story_of_forgotten_land:magic_candy")) continue;
+            stack.shrink(1);
+            restore(player, costAttribute, MagicCandyItem.MANA_AMOUNT);
+            return canAfford(player, costAttribute, amount); // 剩一个后再查一次，仍不够=真不够
+        }
+        return false;
     }
 
     /**

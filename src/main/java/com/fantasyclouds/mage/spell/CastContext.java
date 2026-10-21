@@ -40,11 +40,14 @@ public class CastContext {
         return pending;
     }
 
-    /** pipeline 收尾：把所有待发射弹生成实体。 */
-    public void launchAll() {
+    /** pipeline 收尾：把所有待发射弹生成实体。
+     *  @return 是否至少有一颗弹真正生成（launch 成功）——cast 据此判定"施法成功"才允许扣蓝。 */
+    public boolean launchAll() {
+        boolean spawned = false;
         for (SpellProjectile projectile : pending) {
-            projectile.launch(this);
+            if (projectile.launch(this)) spawned = true;
         }
         pending.clear();
+        return spawned;
     }
 }

@@ -15,9 +15,10 @@ import net.minecraft.world.level.Level;
  */
 public class MagicCandyItem extends Item {
 
-    private static final double MANA_AMOUNT = 40.0;
+    /** 每颗回复量（复刻 SOFL 原数值）。供 SpellCostManager 自动服用兜底复用。 */
+    public static final double MANA_AMOUNT = 40.0;
     /** 整合包资源 = Brutality 蓝（反射桥按命名空间路由，扣/加的是当前蓝条）。 */
-    private static final ResourceLocation MANA_ATTRIBUTE = new ResourceLocation("brutality", "max_mana");
+    public static final ResourceLocation MANA_ATTRIBUTE = new ResourceLocation("brutality", "max_mana");
 
     public MagicCandyItem() {
         super(new Item.Properties().stacksTo(64).rarity(Rarity.COMMON)
