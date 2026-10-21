@@ -25,6 +25,7 @@ import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.registries.ForgeRegistries;
 import org.joml.Quaternionf;
+import org.joml.Vector3f;
 
 import java.util.UUID;
 
@@ -235,7 +236,9 @@ public class SpellBolt extends AbstractHurtingProjectile {
         axis = axis.normalize();
         Quaternionf quat = new Quaternionf().rotationAxis((float) Math.toRadians(step),
                 (float) axis.x, (float) axis.y, (float) axis.z);
-        Vec3 newDir = curDir.rotate(quat).normalize();
+        // Vec3（1.20.1 官方映射）没有 rotate(Quaternionf)——旋转走 JOML Vector3f.rotate 等同实现
+        Vector3f v3 = new Vector3f((float) curDir.x, (float) curDir.y, (float) curDir.z).rotate(quat);
+        Vec3 newDir = new Vec3(v3.x, v3.y, v3.z).normalize();
         this.setDeltaMovement(newDir.scale(speed));
     }
 
