@@ -25,25 +25,26 @@ modid:     mage
 ```json
 {
   "item": "mage:test_staff",
-  "projectileType": "",
-  "ballDamage": 8.0,
-  "ballType": 3,
-  "projectileSpeed": 2.0,
-  "lifetime": 40,
   "cost": { "attribute": "brutality:max_mana", "amount": 10.0 },
   "fastCooldown": 12,
   "slowCooldown": 20,
   "isOverwrite": true,
   "sequence": [
+    { "type": "projectile", "damage": 8.0, "ballType": 0, "speed": 2.2, "lifetime": 60 },
     { "type": "antigravity" },
-    { "type": "visual", "entity": "lethality:acidic_slash" },
     { "type": "split", "count": 3, "spread": 40 },
-    { "type": "pierce", "count": 5 }
+    { "type": "homing", "range": 16.0, "turn": 12.0, "hostileOnly": true },
+    { "type": "area", "radius": 3.0, "interval": 5 },
+    { "type": "bounce", "count": 3 }
   ]
 }
 ```
 
 `/reload` 即可热重载。
+
+> **顶层扁平字段（projectileType/ballDamage/projectileSpeed/lifetime）已废弃**——新配置一律
+> 把弹的属性写进 sequence 里的 `projectile` 步骤。loader 仅对**旧格式 JSON（无 sequence）**
+> 向后兼容折叠成单个 projectile 步骤。
 
 ---
 
@@ -53,39 +54,44 @@ modid:     mage
 |---|---|---|
 | `item` | ✅ | 法杖物品注册名（`mod:item`） |
 | `name` | - | 物品显示名（可中文） |
-| `projectileType` | - | 外部法弹实体 id；空/缺 = 内置弹 `mage:spell_bolt` |
-| `ballDamage` | - | 法术基础伤害（顶层默认；sequence 内 projectile 步骤也可自己写） |
-| `ballType` | - | 伤害类型 0-5（见下） |
-| `projectileSpeed` | - | 初速 |
-| `lifetime` | - | 存活 ticks |
 | `cost` | - | `{attribute, amount}` 施法消耗；缺 = 不消耗 |
 | `fastCooldown` / `slowCooldown` | - | 冷却（tick）；`spell_potency` 附魔切 fast |
 | `isOverwrite` | - | 是否吞掉物品原右键行为 |
-| `sequence` | - | **有序法术步骤**（见下）；缺省 = 旧扁平字段折叠成单个 projectile |
+| `sequence` | ✅ | **有序法术步骤**（见下）；无 projectile 步骤 → 不发射、不扣蓝 |
 
 **ballType 伤害类型映射**：`0=普通魔法 · 1=火焰 · 2=冰霜 · 3=闪电 · 4=虚空 · 5=奥术(目标减速+施法者再生)`
 
 **消耗模型**：`cost.attribute` 指定消耗哪个属性，按**当前值**扣减、够才放行。
 `brutality:max_mana` 有特例——经反射桥接读 Brutality 的**当前蓝条**（不是上限），
-无 Brutality 时放行不扣。想用别的资源当蓝（饥饿值/自定义属性）直接把 attribute 换掉即可。
+无 Brutality 时放行不扣。**蓝不足时自动吃背包魔法糖果（+40）兜底重判**（`mage:magic_candy`
+与 `story_of_forgotten_land:magic_candy` 都认）。想用别的资源当蓝直接把 attribute 换掉即可。
+
+> 旧格式兼容：只有 `manaCost` 视为消耗 `mage:mana`；无 sequence 的旧扁平字段折叠成单 projectile 步骤。
 
 ---
 
 ## sequence —— 有序法术步骤（Noita 式流水线）
 
-法术不再是"一个固定弹"，而是**一串按顺序执行的步骤**：第一步通常是 payload（发射物），
+法术不再是"一个固定弹"，而是**一串按顺序执行的步骤**：第一步必须是 payload（发射物），
 后面的修饰符按序改造它。**顺序有语义**（修饰符只作用于它之前收集的弹）。
 
 | type | 分类 | 参数 | 说明 |
 |---|---|---|---|
-| `projectile` | payload | `damage` `ballType` `speed` `lifetime` `projectileType` | 发射受重力弹（抛物线） |
-| `antigravity` | payload | 同上 | 发射无重力弹（直线，当前主流） |
-| `visual` | modifier | `entity` | **外观修饰**：把弹渲染委托给任意模组实体模型 |
+| `projectile` | payload | `damage` `ballType` `speed` `lifetime` `projectileType` | **唯一**发射步骤：受重力弹（抛物线），弹的一切属性在此定义 |
+| `antigravity` | modifier | 无 | 把已收集的弹标记为无重力（直线）——**修饰符**，不带任何 payload 属性 |
+| `visual` | modifier | `entity` `yawOffset` `particles` | **外观修饰**：把弹渲染委托给任意模组实体模型 + 拖尾粒子 |
 | `split` | modifier | `count`（倍率） `spread`（总角度·度） | 每颗弹复制 count 份扇形分布；**可叠层**（×2 再 ×2 = ×4） |
 | `pierce` | modifier | `count`（可穿透实体数） | 穿墙不消失、每个实体只结算一次、穿够 count 个消失 |
-| _homing/area/bounce…_ | 规划中 | — | 后续原语，走同一模式 |
+| `homing` | modifier | `range` `turn`（度/tick） `hostileOnly` | 追踪：范围内最近可锁目标转向；hostileOnly=true 只锁敌对（Enemy ∪ 对施法者仇恨），驯养生物恒排除 |
+| `area` | modifier | `radius` `interval` | **持续范围伤害场**（lethality AcidicSlash 式）：飞行期间每 interval tick 对半径内实体结算范围伤害，碰撞瞬间额外结算一次 |
+| `bounce` | modifier | `count` | 撞方块反射速度继续飞（严格对齐 conjurer BouncingBall：反射后速度大小不变、弹跳高度恒定），count 耗尽才消失 |
 
-示例：`antigravity → visual → split×3 → pierce×5` = 3 颗直线弹（全用目标实体外观），每颗穿透 5 个实体。
+示例：`projectile → antigravity → visual → split×3 → homing → area → bounce×3`
+= 3 颗无重力直线弹（全用目标实体外观 + 拖尾），追踪敌对目标、每 5 tick 范围伤害、撞墙反弹 3 次。
+
+> **弹跳行为**（2026-10-22 对齐 conjurer）：反射后速度**大小不变**、无能量衰减，反弹多少次速度都恒定、
+> 弹跳高度恒定——只靠 `bounce.count` 兜底。受重力弹落地时保底起跳 vy（0.15）防贴地板逐 tick 反复撞。
+> **pierce 与 bounce 互斥**：穿透弹撞墙不反射（onHitBlock 早退），一把杖别同时堆两者。
 
 ---
 

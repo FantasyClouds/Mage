@@ -40,9 +40,12 @@ import java.util.UUID;
  * - 追踪：NBT {@code spell_homing} > 0 时锁定范围内最近的可锁目标转向（度/tick 由 spell_homing_turn）；
  *   {@code spell_homing_hostile}=true（缺省）只锁敌对（Enemy ∪ 对施法者仇恨），false 也锁中立/被动，
  *   施法者驯养生物（OwnableEntity）在任何模式下都恒被排除。
- * - 反弹：NBT {@code spell_bounce} > 0 时撞方块按碰撞面反射（轴对齐面上等价 conjurer 逐轴取反）。
- *   受重力（projectile）：保底起跳 vy + 能量耗尽消失，防贴地抖动；无重力（antigravity）：完美反射
- *   速度不衰减，靠 count / 生命时间结束。参考 conjurer_illager BouncingBallEntity。
+ * - 范围伤害：NBT {@code spell_area} + {@code spell_area_interval} 时构成持续范围伤害场——
+ *   飞行期间每 interval tick 对自身半径内实体结算范围伤害（lethality AcidicSlash 式），
+ *   碰撞瞬间另额外结算一次。伤害统一走 SpellDamageHelper 魔法结算。
+ * - 反弹：NBT {@code spell_bounce} > 0 时撞方块按碰撞面反射速度继续飞，count 耗尽才消失。
+ *   严格对齐 conjurer BouncingBallEntity：反射速度大小不变（无恢复系数/无能量耗尽判别），
+ *   受重力时保底起跳 vy 防贴地抖动，反弹多少次速度恒定、高度恒定，纯粹靠 count 兜底。
  */
 public class SpellBolt extends AbstractHurtingProjectile {
 
@@ -102,15 +105,9 @@ public class SpellBolt extends AbstractHurtingProjectile {
     private static final double GRAVITY = 0.04;
     /** 穿透模式每 tick 扫描半径（不含弹本体碰撞箱）。 */
     private static final double PIERCE_RADIUS = 0.9;
-    /** 受重力弹反弹后的最小垂直分量（起跳速度）。conjurer 用反弹次数上限兜底贴地抖动；
-     *  我们给落地/碰顶反弹后一个最小 vy，保证弹真正离面，不会贴地逐 tick 反复撞。 */
+    /** 反弹后的最小垂直分量（起跳速度）。对齐 conjurer 无能量衰减的弹跳；但极小的 vy 会让
+     *  受重力弹贴地逐 tick 反复撞（纯靠 bounce 次数兜底会烧完 count），给一个保底离面速度。 */
     private static final double MIN_BOUNCE_VY = 0.15;
-    /** 反弹后速度低于该长度阈值 = 弹球能量耗尽（受重力模式）→ 直接消失而非贴地抖动。 */
-    private static final double MIN_BOUNCE_SPEED = 0.06;
-    /** 受重力弹每次碰撞的恢复系数（restitution）：导弹速乘该系数 → 越弹越矮。
-     *  conjurer BouncingBall 靠 ThrowableProjectile 惯性 0.99 达成同理衰减；我们没有全局惯性
-     *  （getInertia=1.0），故在反弹点显式损失能量。无重力弹不做衰减（保持完美反射）。 */
-    private static final double BOUNCE_RESTITUTION = 0.8;
 
     public void setSpellType(int type) {
         this.entityData.set(DATA_SPELL_TYPE, type);
@@ -194,6 +191,14 @@ public class SpellBolt extends AbstractHurtingProjectile {
         // 追踪（NBT spell_homing > 0）：每 tick 向范围内最近非施法者目标转向
         if (tag.getDouble("spell_homing") > 0) {
             doHoming(tag);
+        }
+
+        // 持续范围伤害场（lethality AcidicSlash 式）：spell_area>0 时飞行期间每 interval tick
+        // 对自身半径内所有实体结算一次范围伤害（不是只碰撞时爆）。伤害走统一魔法结算、吃 L2 法伤。
+        int areaInterval = tag.getInt("spell_area_interval");
+        if (tag.getDouble("spell_area") > 0 && areaInterval > 0 && this.level().getGameTime() % areaInterval == 0) {
+            Entity owner = this.getOwner();
+            SpellDamageHelper.applyAreaDamage(this.level(), this.position(), owner != null ? owner : this, tag);
         }
 
         // 拖尾粒子（NBT spell_particles 列表；服务端每 tick 在弹位置发，可多种）
@@ -339,31 +344,25 @@ public class SpellBolt extends AbstractHurtingProjectile {
         CompoundTag tag = this.getPersistentData();
         if (isPiercing()) return; // 穿透：穿墙不消失
 
-        // 反弹（NBT spell_bounce > 0）：撞方块反射速度，继续飞；次数耗尽/能量耗尽(仅受重力)才消失。
+        // 反弹（NBT spell_bounce > 0）：撞方块反射速度继续飞，count 耗尽才消失。
+        // 严格对齐 conjurer BouncingBallEntity：反射后速度<b>大小不变</b>（无恢复系数、
+        // 无能量耗尽判别）——conjurer 球也只在翻转速度，衰减靠它自己的惯性 0.99，我们
+        // getInertia=1.0 无衰减则反弹多少次速度都一样，弹跳高度恒定，纯粹由 count 兜底。
         int bounces = tag.getInt("spell_bounce");
         if (bounces > 0) {
             Direction face = result.getDirection();
             Vec3 motion = this.getDeltaMovement();
             // 轴对齐方块面：法线反射 = conjurer 式「逐轴取反」（BouncingBallEntity 同款：
-            // EAST/WEST 翻 x、SOUTH/NORTH 翻 z、UP/DOWN 翻 y），两种重力模式共用同一反射公式
-            // （conjurer 球受重力在 1.20 也是这套）。真正的模式差异在后处理：
+            // EAST/WEST 翻 x、SOUTH/NORTH 翻 z、UP/DOWN 翻 y），两种重力模式共用。
             Vec3 normal = new Vec3(face.getStepX(), face.getStepY(), face.getStepZ());
             double dot = motion.dot(normal);
             Vec3 reflected = motion.subtract(normal.scale(2.0 * dot));
-            if (!this.antigravity) {
-                // 受重力：碰撞损失能量（恢复系数）→ 越弹越矮，最终能量耗尽消失（conjurer 用惯性
-                // 0.99 达成同理效果）。保底起跳 vy 防贴地板逐 tick 反复撞（conjurer 用 20/5 上限）。
-                reflected = reflected.scale(BOUNCE_RESTITUTION);
-                if (face.getAxis() == Direction.Axis.Y && Math.abs(reflected.y) < MIN_BOUNCE_VY) {
-                    reflected = new Vec3(reflected.x,
-                            reflected.y >= 0 ? MIN_BOUNCE_VY : -MIN_BOUNCE_VY, reflected.z);
-                }
-                if (reflected.lengthSqr() < MIN_BOUNCE_SPEED * MIN_BOUNCE_SPEED) {
-                    this.discard();
-                    return;
-                }
+            // 保底起跳 vy（仅受重力）：极小的垂直分量会让弹贴地板逐 tick 反复撞，烧完 count；
+            // conjurer 靠 20/5 上限兜底，我们用 min-vy 让弹真正离面 + count 兜底。
+            if (!this.antigravity && face.getAxis() == Direction.Axis.Y && Math.abs(reflected.y) < MIN_BOUNCE_VY) {
+                reflected = new Vec3(reflected.x,
+                        reflected.y >= 0 ? MIN_BOUNCE_VY : -MIN_BOUNCE_VY, reflected.z);
             }
-            // 无重力：完美镜面反射，速度不衰减 → 直线弹撞墙折返，靠 count 耗尽/生命时间消失。
             this.setDeltaMovement(reflected);
             this.setPos(this.getX() + normal.x() * 0.05, this.getY() + normal.y() * 0.05, this.getZ() + normal.z() * 0.05);
             tag.putInt("spell_bounce", bounces - 1);
