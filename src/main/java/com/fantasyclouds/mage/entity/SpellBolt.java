@@ -39,6 +39,14 @@ public class SpellBolt extends AbstractHurtingProjectile {
             SynchedEntityData.defineId(SpellBolt.class, EntityDataSerializers.STRING);
     private static final EntityDataAccessor<Float> DATA_SPELL_YAW_OFFSET =
             SynchedEntityData.defineId(SpellBolt.class, EntityDataSerializers.FLOAT);
+    // 发射方向（单位向量，SynchedEntityData 同步给客户端）——客户端实体 deltaMovement 恒为 0
+    // （launch 只在服务端跑、deltaMovement 不同步），视觉代理/目标 renderer 需要"朝哪飞"只能靠这里
+    private static final EntityDataAccessor<Float> DATA_SPELL_DIR_X =
+            SynchedEntityData.defineId(SpellBolt.class, EntityDataSerializers.FLOAT);
+    private static final EntityDataAccessor<Float> DATA_SPELL_DIR_Y =
+            SynchedEntityData.defineId(SpellBolt.class, EntityDataSerializers.FLOAT);
+    private static final EntityDataAccessor<Float> DATA_SPELL_DIR_Z =
+            SynchedEntityData.defineId(SpellBolt.class, EntityDataSerializers.FLOAT);
 
     /** 无重力（直线）？默认 true，对应 antigravity 原语（当前主流法术）。projectile 原语为 false 走重力抛物线。 */
     private boolean antigravity = true;
@@ -60,6 +68,19 @@ public class SpellBolt extends AbstractHurtingProjectile {
         this.xPower = movement.x;
         this.yPower = movement.y;
         this.zPower = movement.z;
+        // 同步发射方向到客户端（单位向量）——视觉代理/目标 renderer 需要它算朝向
+        double len = movement.length();
+        this.entityData.set(DATA_SPELL_DIR_X, (float) (len > 0 ? movement.x / len : 0));
+        this.entityData.set(DATA_SPELL_DIR_Y, (float) (len > 0 ? movement.y / len : 0));
+        this.entityData.set(DATA_SPELL_DIR_Z, (float) (len > 0 ? movement.z / len : 0));
+    }
+
+    /** 客户端取发射方向（单位向量；未发射/无方向 = 零向量）。 */
+    public Vec3 getSpellDirection() {
+        return new Vec3(
+                this.entityData.get(DATA_SPELL_DIR_X),
+                this.entityData.get(DATA_SPELL_DIR_Y),
+                this.entityData.get(DATA_SPELL_DIR_Z));
     }
 
     /** 受重力弹的逐 tick 重力加速度（y 方向，每 tick 减；值越小越平）。 */
@@ -99,6 +120,9 @@ public class SpellBolt extends AbstractHurtingProjectile {
         this.entityData.define(DATA_SPELL_TYPE, 0);
         this.entityData.define(DATA_SPELL_VISUAL, "");
         this.entityData.define(DATA_SPELL_YAW_OFFSET, 0f);
+        this.entityData.define(DATA_SPELL_DIR_X, 0f);
+        this.entityData.define(DATA_SPELL_DIR_Y, 0f);
+        this.entityData.define(DATA_SPELL_DIR_Z, 0f);
     }
 
     private boolean isPiercing() {

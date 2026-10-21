@@ -14,6 +14,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.projectile.Projectile;
+import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.registries.ForgeRegistries;
 import org.joml.Matrix3f;
 import org.joml.Matrix4f;
@@ -73,16 +74,20 @@ public class SpellBoltRenderer extends EntityRenderer<SpellBolt> {
 
             // 把施法弹的姿态与运动搬给代理：位置/朝向/速度/tick（动画推进对齐）。
             // ⚠️ 关键：很多目标 Renderer（如 lethality AcidicSlashRenderer）**不读 yRot**，
-            // 而是从 getDeltaMovement() 自己算朝向——代理 deltaMovement 必须搬过去，
-            // 否则朝向恒为固定值（锁死不随发射角度变）。
+            // 而是从 getDeltaMovement() 自己算朝向。而客户端 SpellBolt 的 deltaMovement 恒为 0
+            // （launch 只在服务端跑、deltaMovement 不同步）——必须用 SynchedEntityData 同步的
+            // 发射方向 getSpellDirection() 重建，否则代理朝向锁死。
             // yawOffset 仅用于校准目标模型自带的静态朝向基准（有需要才配）。
-            float visualYaw = bolt.getYRot() + bolt.getSpellYawOffset();
+            Vec3 dir = bolt.getSpellDirection();
+            if (dir.lengthSqr() < 0.0001) return false; // 方向没同步上（不应发生）：回落 billboard
+            float visualYaw = (float) Math.toDegrees(Math.atan2(-dir.x, dir.z)) + bolt.getSpellYawOffset();
+            float visualPitch = (float) Math.toDegrees(Math.atan2(-dir.y, Math.sqrt(dir.x * dir.x + dir.z * dir.z)));
             proxy.setPos(bolt.getX(), bolt.getY(), bolt.getZ());
             proxy.setYRot(visualYaw);
-            proxy.setXRot(bolt.getXRot());
-            proxy.yRotO = bolt.yRotO + bolt.getSpellYawOffset();
-            proxy.xRotO = bolt.xRotO;
-            proxy.setDeltaMovement(bolt.getDeltaMovement());
+            proxy.setXRot(visualPitch);
+            proxy.yRotO = visualYaw;
+            proxy.xRotO = visualPitch;
+            proxy.setDeltaMovement(dir); // 单位方向即可：renderer 只要朝向，不看速度大小
             proxy.tickCount = bolt.tickCount;
             if (proxy instanceof Projectile p) {
                 p.setOwner(bolt.getOwner()); // bolt 本身即 Projectile（SpellBolt 继承 AbstractHurtingProjectile）
