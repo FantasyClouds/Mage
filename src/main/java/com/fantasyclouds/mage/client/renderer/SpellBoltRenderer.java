@@ -13,6 +13,7 @@ import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.projectile.Projectile;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.registries.ForgeRegistries;
@@ -91,6 +92,14 @@ public class SpellBoltRenderer extends EntityRenderer<SpellBolt> {
             proxy.tickCount = bolt.tickCount;
             if (proxy instanceof Projectile p) {
                 p.setOwner(bolt.getOwner()); // bolt 本身即 Projectile（SpellBolt 继承 AbstractHurtingProjectile）
+            }
+            // 关键：LivingEntity 的渲染朝向（MobRenderer）用 yHeadRot/yBodyRot 而非 yRot——
+            // 不设置则猪这类 3D 实体模型恒朝默认方向，不随玩家视角转。
+            if (proxy instanceof LivingEntity le) {
+                le.setYHeadRot(visualYaw);
+                le.setYBodyRot(visualYaw);
+                le.yHeadRotO = visualYaw;
+                le.yBodyRotO = visualYaw;
             }
 
             // 用目标实体自己的 Renderer 渲染（模型/动画/贴图全由它负责）。
