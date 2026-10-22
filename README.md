@@ -86,6 +86,11 @@ modid:     mage
 | `area` | modifier | `radius` `interval` | **持续范围伤害场**（lethality AcidicSlash 式）：飞行期间每 interval tick 对半径内实体结算范围伤害，碰撞瞬间额外结算一次 |
 | `bounce` | modifier | `count` | 撞方块反射速度继续飞（严格对齐 conjurer BouncingBall：反射后速度大小不变、弹跳高度恒定），count 耗尽才消失 |
 
+**运行时架构**：每个 modifier 步骤装配时向弹注册一个**运行时行为对象**（`BoltBehavior`：
+Pierce/Homing/Area/Bounce 各一个实现），`SpellBolt.tick / onHitBlock / onHitEntity` 只按
+sequence 顺序遍历行为列表执行。行为间完全正交、可任意组合——antigravity（发射属性）与
+area/bounce（行为对象）互不干扰，加新原语只需新增一个行为类 + Step 注册，不改 SpellBolt 主类。
+
 示例：`projectile → antigravity → visual → split×3 → homing → area → bounce×3`
 = 3 颗无重力直线弹（全用目标实体外观 + 拖尾），追踪敌对目标、每 5 tick 范围伤害、撞墙反弹 3 次。
 

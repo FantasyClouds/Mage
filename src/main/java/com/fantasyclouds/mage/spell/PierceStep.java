@@ -32,6 +32,8 @@ public class PierceStep implements SpellStep {
     public void apply(CastContext ctx) {
         for (SpellProjectile p : ctx.pending()) {
             p.pierceCount += count;
+            // 注册穿透运行时行为（顺序 = sequence 顺序；split 时深拷贝独立剩余次数）
+            p.behaviors.add(new com.fantasyclouds.mage.entity.PierceBehavior(count));
         }
     }
 }

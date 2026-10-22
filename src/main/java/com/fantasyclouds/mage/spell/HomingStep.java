@@ -38,6 +38,8 @@ public class HomingStep implements SpellStep {
             p.homingRange = range;
             p.homingTurn = turn;
             p.homingHostileOnly = hostileOnly;
+            // 注册追踪运行时行为（顺序 = sequence 顺序）
+            p.behaviors.add(new com.fantasyclouds.mage.entity.HomingBehavior(range, turn, hostileOnly));
         }
     }
 }

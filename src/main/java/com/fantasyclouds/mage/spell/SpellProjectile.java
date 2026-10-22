@@ -55,6 +55,8 @@ public class SpellProjectile {
     public float yawOffset = 0f;
     /** 拖尾粒子列表（可叠加多种，如火焰+酸泡同时拖尾）。VisualStep 往这追加，不覆盖。 */
     public final List<ParticleSpec> particles = new ArrayList<>();
+    /** 运行时行为列表（Pierce/Homing/Area/Bounce 各修饰符注册一个；顺序 = sequence 顺序，发射时注入 SpellBolt）。 */
+    public final List<com.fantasyclouds.mage.entity.BoltBehavior> behaviors = new ArrayList<>();
 
     public SpellProjectile(String projectileType, double damage, int ballType, double speed, int lifetime) {
         this(projectileType, damage, ballType, speed, lifetime, true, 0.0);
@@ -86,6 +88,10 @@ public class SpellProjectile {
         p.areaRadius = this.areaRadius;
         p.areaInterval = this.areaInterval;
         p.bounceCount = this.bounceCount;
+        // 行为深拷贝：split 各弹独立状态（如 pierce 剩余次数）。
+        for (com.fantasyclouds.mage.entity.BoltBehavior b : this.behaviors) {
+            p.behaviors.add(b.copy());
+        }
         return p;
     }
 
@@ -128,6 +134,8 @@ public class SpellProjectile {
             bolt.setSpellType(ballType);
             if (visual != null && !visual.isEmpty()) bolt.setSpellVisual(visual);
             if (yawOffset != 0f) bolt.setSpellYawOffset(yawOffset);
+            // 注入运行时行为（顺序 = sequence 顺序；split 已深拷贝独立状态）
+            bolt.setBehaviors(this.behaviors);
         } else {
             entity.setDeltaMovement(motion);
         }

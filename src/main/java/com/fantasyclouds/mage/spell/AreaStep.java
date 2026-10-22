@@ -34,6 +34,8 @@ public class AreaStep implements SpellStep {
         for (SpellProjectile p : ctx.pending()) {
             p.areaRadius = radius;
             p.areaInterval = interval;
+            // 注册持续范围伤害场运行时行为（顺序 = sequence 顺序）
+            p.behaviors.add(new com.fantasyclouds.mage.entity.AreaBehavior(radius, interval));
         }
     }
 }
