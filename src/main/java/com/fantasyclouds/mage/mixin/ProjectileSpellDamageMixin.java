@@ -35,18 +35,25 @@ public abstract class ProjectileSpellDamageMixin {
         CompoundTag tag = self.getPersistentData();
         if (!tag.contains("spell_damage")) return;
 
+        // 方块命中：完全不干预（不设幂等 flag、不 cancel）——让 SpellBolt.onHitBlock 的
+        // bounce 反弹每次都能自由执行。若在此设 flag，第二次撞墙就会被幂等分支 cancel 掉
+        // onHitBlock，弹直接穿墙/结束（2026-10-22 修复：bounce「弹一次就结束」真根因）。
+        if (!(result instanceof EntityHitResult entityHit)) return;
+
+        // 内置弹 SpellBolt 全自管：实体命中由 onHitEntity 自己结算（damage+area+burst+discard），
+        // 方块命中由 onHitBlock 自己反弹。mixin 只接管<b>外部弹射物</b>（adventuresmod 等）。
+        if (self instanceof com.fantasyclouds.mage.entity.SpellBolt) return;
+
         // 穿透弹不走通用接管：SpellBolt 自身 tick AABB 扫描结算（每实体一次），
         // 若在此 discard/cancel 会杀死穿透弹。识别 spell_pierce NBT 放行。
         if (tag.getInt("spell_pierce") > 0) return;
 
-        // 幂等：同一弹可能被 onHit / onHitEntity 双路径或同 tick 二次命中结算 → 只结算一次
+        // 幂等：同一外部弹可能被 onHit / onHitEntity 双路径或同 tick 二次命中结算 → 只结算一次
         if (tag.getBoolean("mage$spell_handled")) {
             ci.cancel(); // 已结算：抑制原生二次处理，不再重复伤害
             return;
         }
         tag.putBoolean("mage$spell_handled", true);
-
-        if (!(result instanceof EntityHitResult entityHit)) return; // 只接管命中实体
 
         Entity owner = self.getOwner();
         Entity source = owner != null ? owner : self;

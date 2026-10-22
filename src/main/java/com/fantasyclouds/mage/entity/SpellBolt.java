@@ -364,7 +364,10 @@ public class SpellBolt extends AbstractHurtingProjectile {
                         reflected.y >= 0 ? MIN_BOUNCE_VY : -MIN_BOUNCE_VY, reflected.z);
             }
             this.setDeltaMovement(reflected);
-            this.setPos(this.getX() + normal.x() * 0.05, this.getY() + normal.y() * 0.05, this.getZ() + normal.z() * 0.05);
+            // 推出碰撞面：0.05 对慢速弹不够（boundingBox 边缘仍压着面 → 下 tick 又触发碰撞，
+            // 视觉上像"卡在墙上没弹起来"）。conjurer 不推出靠它自己的惯性衰减；我们速度不衰减，
+            // 必须保证弹真正离面。0.1 让弹中心完全移出碰撞面。
+            this.setPos(this.getX() + normal.x() * 0.1, this.getY() + normal.y() * 0.1, this.getZ() + normal.z() * 0.1);
             tag.putInt("spell_bounce", bounces - 1);
             // 命中即结算范围伤害（若配了 area），然后反射继续飞
             if (tag.getDouble("spell_area") > 0) {
