@@ -1,6 +1,7 @@
 package com.fantasyclouds.mage.data;
 
 import com.fantasyclouds.mage.Mage;
+import com.fantasyclouds.mage.cast.SpellDamageHelper;
 import com.fantasyclouds.mage.network.SyncCasterStatsPacket;
 import com.fantasyclouds.mage.spell.DamageGroup;
 import com.fantasyclouds.mage.spell.SpellAnalyzer;
@@ -37,6 +38,11 @@ public class CasterStatsLoader extends SimpleJsonResourceReloadListener {
     public static final Gson GSON = new GsonBuilder().create();
     public static final String FOLDER = "caster_stats";
 
+    /** 默认资源池（2026-10-23 定案）：cost 存在但<b>不写 attribute</b> = 消耗 <b>Brutality 当前蓝
+     *  （魔力，非属性）</b>。SpellCostManager 按命名空间 "brutality" 走反射桥吃当前蓝条；
+     *  id 的 path 段仅作展示，无实际属性含义。给别的属性池显式写 {@code attribute}。 */
+    private static final ResourceLocation DEFAULT_COST_POOL = new ResourceLocation("brutality", "mana");
+
     public CasterStatsLoader() {
         super(GSON, FOLDER);
     }
@@ -64,29 +70,38 @@ public class CasterStatsLoader extends SimpleJsonResourceReloadListener {
         String name = json.has("name") ? json.get("name").getAsString() : null;
         String projectileType = json.has("projectileType") ? json.get("projectileType").getAsString() : "";
         double ballDamage = json.has("ballDamage") ? json.get("ballDamage").getAsDouble() : 0.0;
-        int ballType = json.has("ballType") ? json.get("ballType").getAsInt() : 0;
+        // 伤害类型（2026-10-22 定案·字符串）：damageType 字符串优先；旧 ballType 数字向后兼容转字符串。
+        String damageType = json.has("damageType")
+                ? json.get("damageType").getAsString()
+                : SpellDamageHelper.fromLegacyInt(json.has("ballType") ? json.get("ballType").getAsInt() : 0);
         double projectileSpeed = json.has("projectileSpeed") ? json.get("projectileSpeed").getAsDouble() : 0.0;
+        // 顶层是否显式声明了伤害类型（damageType 字符串 或 旧 ballType 数字）；否则 sequence 首颗 projectile 推演。
+        boolean damageTypeExplicit = json.has("damageType") || json.has("ballType");
         int fastCooldown = json.has("fastCooldown") ? json.get("fastCooldown").getAsInt() : 0;
         int slowCooldown = json.has("slowCooldown") ? json.get("slowCooldown").getAsInt() : 0;
         boolean isOverwrite = json.has("isOverwrite") && json.get("isOverwrite").getAsBoolean();
         int lifetime = json.has("lifetime") ? json.get("lifetime").getAsInt() : 0;
 
-        // 消耗属性完全由 JSON 显式配置：cost:{attribute, amount}；缺 cost 字段 = 无消耗（不扣任何东西）。
+        // 消耗：缺 cost = 免费施法；cost 无 attribute = 默认池 Brutality 当前蓝（魔力，非属性，2026-10-23 定案）；
+        // cost.attribute 显式写 = 按指定属性池扣减。
         ResourceLocation costAttribute = null;
         double costAmount = 0.0;
         if (json.has("cost")) {
             JsonObject cost = json.getAsJsonObject("cost");
-            costAttribute = ResourceLocation.tryParse(cost.get("attribute").getAsString());
+            costAttribute = cost.has("attribute")
+                    ? ResourceLocation.tryParse(cost.get("attribute").getAsString())
+                    : DEFAULT_COST_POOL;
             costAmount = cost.get("amount").getAsDouble();
         }
 
-        // 有序法术步骤：有 sequence 用它（缺省回落顶层旧字段）；无 sequence = 旧扁平格式折叠成单 projectile 步骤。
-        StepDefaults defaults = new StepDefaults(projectileType, ballDamage, ballType, projectileSpeed, lifetime);
+        // 有序法术步骤：有 sequence 用它（缺省回落顶层旧字段）；无 sequence = 旧扁平格式折叠成
+        // projectile + visual 步骤（顶层旧 projectileType 自动转外观委托，见 SpellSteps）。
+        StepDefaults defaults = new StepDefaults(ballDamage, damageType, projectileSpeed, lifetime);
         List<SpellStep> sequence;
         if (json.has("sequence") && json.get("sequence").isJsonArray()) {
             sequence = SpellSteps.parse(json.getAsJsonArray("sequence"), defaults);
         } else {
-            sequence = List.of(SpellSteps.defaultProjectile(projectileType, ballDamage, ballType, projectileSpeed, lifetime));
+            sequence = SpellSteps.defaultFlatSequence(projectileType, ballDamage, damageType, projectileSpeed, lifetime);
         }
 
         // 伤害组（HUD「单体伤害x数量」显示源）：静态推演；空且顶层有伤害→兜底 [ballDamage×1]。
@@ -95,7 +110,18 @@ public class CasterStatsLoader extends SimpleJsonResourceReloadListener {
             damageGroups = List.of(new DamageGroup(ballDamage, 1));
         }
 
-        return new CasterStats(item, name, projectileType, ballDamage, ballType, costAttribute, costAmount,
+        // 顶层未显式声明伤害类型 → 从 sequence 首颗 projectile 推演（type 杖多步各类型时 HUD 显示第一颗，
+        // 不再恒显兜底 magic——2026-10-22 修「type 杖看着全是魔法伤害」的显示误导）。
+        if (!damageTypeExplicit) {
+            for (SpellStep step : sequence) {
+                if (step instanceof com.fantasyclouds.mage.spell.ProjectileStep p) {
+                    damageType = p.damageType();
+                    break;
+                }
+            }
+        }
+
+        return new CasterStats(item, name, ballDamage, damageType, costAttribute, costAmount,
                 projectileSpeed, fastCooldown, slowCooldown, isOverwrite, lifetime, sequence, damageGroups);
     }
 

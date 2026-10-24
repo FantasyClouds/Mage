@@ -27,6 +27,11 @@ public class BounceBehavior implements BoltBehavior {
         return remaining > 0;
     }
 
+    /** 剩余反弹次数（预演 beam 时读取：初始次数决定路径能在墙上反射几次）。 */
+    public int remaining() {
+        return remaining;
+    }
+
     @Override
     public boolean onHitBlock(SpellBolt bolt, BlockHitResult result, CompoundTag tag) {
         if (remaining <= 0) return false;

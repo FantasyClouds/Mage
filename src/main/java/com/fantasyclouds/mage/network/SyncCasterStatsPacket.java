@@ -33,10 +33,10 @@ public class SyncCasterStatsPacket {
             buf.writeUtf(s.item());
             buf.writeBoolean(s.name() != null);
             if (s.name() != null) buf.writeUtf(s.name());
-            buf.writeUtf(s.projectileType());
             buf.writeDouble(s.ballDamage());
-            buf.writeInt(s.ballType());
-            buf.writeUtf(s.costAttribute().toString());
+            buf.writeUtf(s.damageType());
+            // costAttribute 可能为 null（JSON 无 cost 字段 = 免费施法）——写空串，解码端转回 null
+            buf.writeUtf(s.costAttribute() != null ? s.costAttribute().toString() : "");
             buf.writeDouble(s.costAmount());
             buf.writeDouble(s.projectileSpeed());
             buf.writeInt(s.fastCooldown());
@@ -60,9 +60,8 @@ public class SyncCasterStatsPacket {
             String key = buf.readUtf();
             String item = buf.readUtf();
             String name = buf.readBoolean() ? buf.readUtf() : null;
-            String projectileType = buf.readUtf();
             double ballDamage = buf.readDouble();
-            int ballType = buf.readInt();
+            String damageType = buf.readUtf();
             ResourceLocation costAttr = ResourceLocation.tryParse(buf.readUtf());
             double costAmount = buf.readDouble();
             double projectileSpeed = buf.readDouble();
@@ -76,7 +75,7 @@ public class SyncCasterStatsPacket {
             for (int gi = 0; gi < groupCount; gi++) {
                 groups.add(new com.fantasyclouds.mage.spell.DamageGroup(buf.readDouble(), buf.readVarInt()));
             }
-            map.put(key, new CasterStats(item, name, projectileType, ballDamage, ballType, costAttr, costAmount,
+            map.put(key, new CasterStats(item, name, ballDamage, damageType, costAttr, costAmount,
                     projectileSpeed, fastCooldown, slowCooldown, isOverwrite, lifetime, List.of(), groups));
         }
         return new SyncCasterStatsPacket(map);

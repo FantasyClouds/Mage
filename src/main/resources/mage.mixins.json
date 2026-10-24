@@ -2,10 +2,11 @@
   "required": true,
   "minVersion": "0.8",
   "package": "com.fantasyclouds.mage.mixin",
-  "compatibilityLevel": "JAVA_8",
+  "compatibilityLevel": "JAVA_17",
   "refmap": "mage.refmap.json",
   "mixins": [
-    "ProjectileSpellDamageMixin"
+    "ProjectileSpellDamageMixin",
+    "LivingEntitySpellDamageMixin"
   ],
   "client": [
   ],

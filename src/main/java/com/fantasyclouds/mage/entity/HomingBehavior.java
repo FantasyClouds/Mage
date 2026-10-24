@@ -30,9 +30,33 @@ public class HomingBehavior implements BoltBehavior {
         this.hostileOnly = hostileOnly;
     }
 
+    public double range() {
+        return range;
+    }
+
+    public double turnDeg() {
+        return turnDeg;
+    }
+
+    public boolean hostileOnly() {
+        return hostileOnly;
+    }
+
     @Override
     public boolean onTick(SpellBolt bolt, CompoundTag tag) {
-        Entity owner = bolt.getOwner();
+        LivingEntity target = findTarget(bolt, bolt.getOwner(), range, hostileOnly);
+        if (target == null) return false;
+        double speed = bolt.getDeltaMovement().length();
+        if (speed < 1.0E-6) return false;
+        Vec3 dir = steer(bolt.getDeltaMovement().scale(1.0 / speed), bolt.position(),
+                target.getEyePosition(), turnDeg);
+        if (dir != null) bolt.setDeltaMovement(dir.scale(speed));
+        return false;
+    }
+
+    /** 锁定范围内最近的可锁目标（施法者驯养物恒排除；hostileOnly 语义见 isLockable）。
+     *  飞行每 tick 调一次；beam 预演中只调用<b>一次</b>（2026-10-23 用户定案：管你 homing 不 homing）。 */
+    public static LivingEntity findTarget(Entity bolt, Entity owner, double range, boolean hostileOnly) {
         Vec3 pos = bolt.position();
         AABB box = bolt.getBoundingBox().inflate(range);
         LivingEntity target = null;
@@ -42,29 +66,26 @@ public class HomingBehavior implements BoltBehavior {
             double d = e.distanceToSqr(bolt);
             if (d < best) { best = d; target = e; }
         }
-        if (target == null) return false;
+        return target;
+    }
 
-        Vec3 current = bolt.getDeltaMovement();
-        double speed = current.length();
-        if (speed < 1.0E-6) return false;
-        Vec3 curDir = current.scale(1.0 / speed);
-        Vec3 wanted = target.getEyePosition().subtract(pos).normalize();
-
+    /** 把单位方向 curDir 朝目标眼睛位置转动（最多 turnDeg 度），返回新单位方向；
+     *  已对准 / 背对 / 旋转轴退化时返回 null（调用方保持原方向）。 */
+    public static Vec3 steer(Vec3 curDir, Vec3 fromPos, Vec3 toEyePos, double turnDeg) {
+        Vec3 wanted = toEyePos.subtract(fromPos).normalize();
         double dot = Mth.clamp(curDir.dot(wanted), -1.0, 1.0);
         double angleDeg = Math.acos(dot) * 180.0 / Math.PI;
-        if (angleDeg < 0.01 || angleDeg >= 179.0) return false; // 已对准 / 背对（axis 退化）都不转
+        if (angleDeg < 0.01 || angleDeg >= 179.0) return null; // 已对准 / 背对（axis 退化）都不转
 
         double step = Math.min(turnDeg, angleDeg);
         Vec3 axis = curDir.cross(wanted);
-        if (axis.lengthSqr() < 1.0E-8) return false;
+        if (axis.lengthSqr() < 1.0E-8) return null;
         axis = axis.normalize();
         Quaternionf quat = new Quaternionf().rotationAxis((float) Math.toRadians(step),
                 (float) axis.x, (float) axis.y, (float) axis.z);
         // Vec3（1.20.1 官方映射）没有 rotate(Quaternionf)——旋转走 JOML Vector3f.rotate 等同实现
         Vector3f v3 = new Vector3f((float) curDir.x, (float) curDir.y, (float) curDir.z).rotate(quat);
-        Vec3 newDir = new Vec3(v3.x, v3.y, v3.z).normalize();
-        bolt.setDeltaMovement(newDir.scale(speed));
-        return false;
+        return new Vec3(v3.x, v3.y, v3.z).normalize();
     }
 
     /** 追踪候选资格：始终排除 owner 自己 + 被施法者驯养/所属的生物（宠/坐骑）。

@@ -17,7 +17,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  *
  * <p>任何携带 Mage 施法 NBT（{@code spell_damage}）的弹射物（含外部模组法弹，
  * 如 adventuresmod:spell / terramity 火球 / born_in_chaos 法弹等）命中实体时，
- * 改走 {@code SpellDamageHelper} 统一结算（读 NBT ballDamage + ballType 伤害类型），
+ * 改走 {@code SpellDamageHelper} 统一结算（读 NBT {@code spell_damage} + {@code spell_type} 伤害类型字符串），
  * 并 {@code discard + cancel} 掉原生命中处理（原生伤害不再生效）。
  *
  * <p>为什么注入 {@code Projectile.onHit(EntityHitResult)}：这是所有弹射物实体命中的
@@ -57,13 +57,42 @@ public abstract class ProjectileSpellDamageMixin {
 
         Entity owner = self.getOwner();
         Entity source = owner != null ? owner : self;
-        SpellDamageHelper.applySpellDamage(self.level(), entityHit.getEntity(), source, self);
+        Entity target = entityHit.getEntity();
+        SpellDamageHelper.applySpellDamage(self.level(), target, source, self);
+        // 爆裂附魔（mage:burst）：与内置弹一致，命中点燃目标
+        if (tag.getBoolean("spell_enchant_burst")) {
+            target.setSecondsOnFire(10);
+        }
+        // applyEffect 原语：外部弹同样对命中目标施加药水效果列表
+        applyEffects(tag, target);
         // 范围爆裂（AreaStep）：外部弹同样支持——命中点半径内范围伤害
         if (tag.getDouble("spell_area") > 0) {
-            Vec3 at = entityHit.getEntity().position();
+            Vec3 at = target.position();
             SpellDamageHelper.applyAreaDamage(self.level(), at, source, tag);
         }
         self.discard();
         ci.cancel();
+    }
+
+    /** 读 {@code spell_apply_effects} 复合列表，逐个施加到目标（异常单项跳过）。 */
+    private static void applyEffects(CompoundTag tag, Entity target) {
+        if (!(target instanceof net.minecraft.world.entity.LivingEntity living)) return;
+        net.minecraft.nbt.ListTag list = tag.getList("spell_apply_effects", net.minecraft.nbt.Tag.TAG_COMPOUND);
+        if (list.isEmpty()) return;
+        for (net.minecraft.nbt.Tag raw : list) {
+            if (!(raw instanceof CompoundTag pt)) continue;
+            try {
+                net.minecraft.resources.ResourceLocation id =
+                        net.minecraft.resources.ResourceLocation.tryParse(pt.getString("effect"));
+                net.minecraft.world.effect.MobEffect effect =
+                        net.minecraftforge.registries.ForgeRegistries.MOB_EFFECTS.getValue(id);
+                if (effect != null) {
+                    living.addEffect(new net.minecraft.world.effect.MobEffectInstance(
+                            effect, pt.getInt("duration"), pt.getInt("amplifier")));
+                }
+            } catch (Throwable ignored) {
+                // 单个效果异常：跳过，不影响伤害
+            }
+        }
     }
 }

@@ -12,4 +12,10 @@ plugins {
     id 'org.gradle.toolchains.foojay-resolver-convention' version '0.7.0'
 }
 
+// 2026-10-23: 本机访问 forge maven 不稳定，构建默认离线，只用本地缓存
+// （~/.m2 + ~/.gradle/caches 里的 forge userdev/universal/mcp_config 已齐全）。
+// 属性名是 offline（不是 isOffline）。必须放在 plugins {} 块之后。
+// 需要联网刷新依赖时：临时注释本行后跑 ./gradlew --refresh-dependencies。
+// gradle.startParameter.offline = true   // 2026-10-23 暂时关闭：先联网补全缓存，补全后再考虑开启
+
 rootProject.name = 'mage'

@@ -65,7 +65,7 @@ public class CasterHudOverlay {
 
         String[] lines = {
                 "§a" + Component.translatable("gui.caster_stats.damage", dmgSb.toString()).getString(),
-                "§b" + Component.translatable("gui.caster_stats.type", typeName(s.ballType())).getString(),
+                "§b" + Component.translatable("gui.caster_stats.type", typeName(s.damageType())).getString(),
                 "§9" + Component.translatable("gui.caster_stats.mana", FORMAT.format(s.costAmount())).getString(),
                 "§6" + Component.translatable("gui.caster_stats.speed", FORMAT.format(s.projectileSpeed())).getString(),
                 "§c" + Component.translatable("gui.caster_stats.cooldown", FORMAT.format(cdTicks / 20.0)).getString()
@@ -84,16 +84,8 @@ public class CasterHudOverlay {
         }
     };
 
-    private static String typeName(int type) {
-        return switch (type) {
-            case 0 -> "Magic";
-            case 1 -> "Fire";
-            case 2 -> "Frost";
-            case 3 -> "Lightning";
-            case 4 -> "Void";
-            case 5 -> "Arcane";
-            default -> "Unknown";
-        };
+    private static String typeName(String damageType) {
+        return com.fantasyclouds.mage.cast.SpellDamageHelper.displayName(damageType);
     }
 
     private CasterHudOverlay() {}

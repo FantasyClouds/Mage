@@ -32,19 +32,19 @@ import java.util.concurrent.ConcurrentHashMap;
  * 服务端零改动；代理实体仅渲染用，不进世界、不同步。
  *
  * <p><b>billboard 兜底</b>：无视觉 / 目标实体注册名查不到 / 代理创建失败 → 用原来的
- * 面向摄像机的贴图方块，按 ballType 着色。
+ * 面向摄像机的贴图方块，按 damageType（字符串）着色。
  */
 public class SpellBoltRenderer extends EntityRenderer<SpellBolt> {
 
     private static final ResourceLocation TEXTURE = new ResourceLocation("mage", "textures/entity/spell_bolt.png");
-    private static final float[][] TYPE_COLORS = {
-            {1.0f, 1.0f, 1.0f},   // 0 Magic
-            {1.0f, 0.4f, 0.2f},   // 1 Fire
-            {0.5f, 0.8f, 1.0f},   // 2 Frost
-            {1.0f, 0.9f, 0.3f},   // 3 Lightning
-            {0.6f, 0.3f, 1.0f},   // 4 Void
-            {0.3f, 1.0f, 0.8f}    // 5 Arcane
-    };
+    /** 伤害类型字符串 id → RGB 颜色（2026-10-22 定案，不再是数字索引）。 */
+    private static final java.util.Map<String, float[]> TYPE_COLORS = java.util.Map.of(
+            "magic", new float[]{1.0f, 1.0f, 1.0f},
+            "fire", new float[]{1.0f, 0.4f, 0.2f},
+            "frost", new float[]{0.5f, 0.8f, 1.0f},
+            "lightning", new float[]{1.0f, 0.9f, 0.3f},
+            "void", new float[]{0.6f, 0.3f, 1.0f}
+    );
 
     /** 代理实体缓存：注册名 → 客户端代理实例（纯渲染用，避免每帧 create 的开销）。 */
     private static final Map<String, Entity> PROXY_CACHE = new ConcurrentHashMap<>();
@@ -131,7 +131,7 @@ public class SpellBoltRenderer extends EntityRenderer<SpellBolt> {
         return proxy;
     }
 
-    /** Billboard 兜底：面向摄像机贴图方块，按 ballType 着色（原实现）。 */
+    /** Billboard 兜底：面向摄像机贴图方块，按 damageType 字符串着色（2026-10-22）。 */
     private void renderBillboard(SpellBolt entity, float partialTick,
                                  PoseStack pose, MultiBufferSource buffer, int light) {
         pose.pushPose();
@@ -139,8 +139,7 @@ public class SpellBoltRenderer extends EntityRenderer<SpellBolt> {
         pose.mulPose(this.entityRenderDispatcher.cameraOrientation());
         pose.mulPose(Axis.YP.rotationDegrees(180.0f));
 
-        int type = Math.max(0, Math.min(entity.getSpellType(), TYPE_COLORS.length - 1));
-        float[] color = TYPE_COLORS[type];
+        float[] color = TYPE_COLORS.getOrDefault(entity.getSpellType(), TYPE_COLORS.get("magic"));
 
         VertexConsumer consumer = buffer.getBuffer(RenderType.entityTranslucent(TEXTURE));
         PoseStack.Pose p = pose.last();

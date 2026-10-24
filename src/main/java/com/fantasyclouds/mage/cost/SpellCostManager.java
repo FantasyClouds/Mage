@@ -66,7 +66,16 @@ public class SpellCostManager {
     public static boolean consume(Player player, ResourceLocation costAttribute, double amount) {
         if (costAttribute == null || amount <= 0) return true;
         if ("brutality".equals(costAttribute.getNamespace())) {
-            return consumeBrutalityMana(player, amount);
+            float before = currentBrutalityMana(player);
+            boolean ok = consumeBrutalityMana(player, amount);
+            float after = currentBrutalityMana(player);
+            Mage.LOGGER.info("[MageCost] brutality consume amount={} mana {} -> {} (ok={}) thread={} player={} client={} stack={}",
+                    amount, before, after, ok,
+                    Thread.currentThread().getName(),
+                    player.getClass().getSimpleName(),
+                    player.level().isClientSide(),
+                    shortStack());
+            return ok;
         }
         Attribute attr = ForgeRegistries.ATTRIBUTES.getValue(costAttribute);
         if (attr == null || player.getAttribute(attr) == null) return true;
@@ -103,6 +112,8 @@ public class SpellCostManager {
             if (!id.equals("mage:magic_candy") && !id.equals("story_of_forgotten_land:magic_candy")) continue;
             stack.shrink(1);
             restore(player, costAttribute, MagicCandyItem.MANA_AMOUNT);
+            Mage.LOGGER.info("[MageCost] auto-ate magic candy (afford fail, cost={}, manaNow={})",
+                    amount, currentBrutalityMana(player));
             return canAfford(player, costAttribute, amount); // 剩一个后再查一次，仍不够=真不够
         }
         return false;
@@ -130,6 +141,30 @@ public class SpellCostManager {
         }
         writeLedger(player, ledger);
         return true;
+    }
+
+    /** 诊断：取调用栈前 7 帧（跳过本方法自身的帧），用于定位是谁在 Render thread 扣蓝。 */
+    private static String shortStack() {
+        StackTraceElement[] frames = new Throwable().getStackTrace();
+        StringBuilder sb = new StringBuilder();
+        int shown = 0;
+        for (int i = 1; i < frames.length && shown < 7; i++, shown++) {
+            if (shown > 0) sb.append(" <- ");
+            sb.append(frames[i].getClassName()).append('#').append(frames[i].getMethodName())
+              .append(':').append(frames[i].getLineNumber());
+        }
+        return sb.toString();
+    }
+
+    /** 读 Brutality 当前蓝（诊断用；反射失败返回 NaN）。 */
+    private static float currentBrutalityMana(Player player) {
+        try {
+            Class<?> helper = Class.forName("net.goo.brutality.util.magic.ManaHelper");
+            Method getMana = helper.getMethod("getMana", Player.class);
+            return (float) getMana.invoke(null, player);
+        } catch (Exception e) {
+            return Float.NaN;
+        }
     }
 
     /** Brutality 蓝反射桥：检查当前蓝条是否足够（不扣）。无/反射失败 → 放行。 */

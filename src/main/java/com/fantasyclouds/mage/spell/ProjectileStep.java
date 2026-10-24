@@ -1,5 +1,6 @@
 package com.fantasyclouds.mage.spell;
 
+import com.fantasyclouds.mage.cast.SpellDamageHelper;
 import com.google.gson.JsonObject;
 
 /**
@@ -12,29 +13,32 @@ import com.google.gson.JsonObject;
  *
  * <p>JSON 参数（均可缺省，缺省先回落 {@link StepDefaults} 再取本体默认）：
  * <ul>
- *   <li>{@code projectileType} 外部弹实体 id；空/缺 = 内置 mage:spell_bolt</li>
  *   <li>{@code damage} 基础伤害</li>
- *   <li>{@code ballType} 伤害类型 0-5（0=INDIRECT_MAGIC 魔法）</li>
+ *   <li>{@code damageType} 伤害类型字符串（"magic"/"fire"/"frost"/"lightning"/"void"，2026-10-22 定案；旧 arcane 已废弃——效果用 grantEffect/applyEffect 原语）；
+ *       兼容旧 {@code ballType} 数字（0-5）自动转字符串</li>
+ *   <li>{@code damageInterval} 弹级全局伤害间隔 tick（2026-10-22 定案·独立维度）：>0 = 每 interval tick
+ *       结算一次（持续重复场/帧伤，area/pierce/命中结算共用）；缺省 0 = 每实体只结算一次。不再是 area/pierce 的参数。</li>
  *   <li>{@code speed} 初速（本体默认 2.0）</li>
  *   <li>{@code lifetime} 存活 tick（本体默认 60）</li>
  * </ul>
  *
- * <p>视觉委托不在此步骤：外观是修饰属性，独立 {@code visual} 步骤（VisualStep）作用于已收集的弹。
+ * <p>弹永远是内置 {@code mage:spell_bolt}（2026-10-23 定案：不再支持外部弹射物）；视觉委托与粒子
+ * 独立 {@code visual} 步骤（VisualStep）作用于已收集的弹，外观与逻辑解耦。
  */
 public class ProjectileStep implements SpellStep {
 
-    private final String projectileType;
     private final double damage;
-    private final int ballType;
+    private final String damageType;
+    private final int damageInterval;
     private final double speed;
     private final int lifetime;
     private final boolean antigravity;
 
     public double damage() { return damage; }
-    public int ballType() { return ballType; }
+    public String damageType() { return damageType; }
+    public int damageInterval() { return damageInterval; }
     public double speed() { return speed; }
     public int lifetime() { return lifetime; }
-    public String projectileType() { return projectileType; }
     public boolean antigravity() { return antigravity; }
 
     public ProjectileStep(JsonObject json) {
@@ -47,16 +51,25 @@ public class ProjectileStep implements SpellStep {
 
     /** 显式指定无重力与否（SpellSteps 按原语 type 分发）。 */
     public ProjectileStep(JsonObject json, StepDefaults defs, boolean antigravity) {
-        this.projectileType = json.has("projectileType") ? json.get("projectileType").getAsString() : defs.projectileType();
         this.damage = json.has("damage") ? json.get("damage").getAsDouble() : defs.getDamageOr(0.0);
-        this.ballType = json.has("ballType") ? json.get("ballType").getAsInt() : defs.ballType();
+        this.damageType = readDamageType(json, defs);
+        this.damageInterval = json.has("damageInterval") ? json.get("damageInterval").getAsInt() : 0;
         this.speed = json.has("speed") ? json.get("speed").getAsDouble() : defs.getSpeedOr(2.0);
         this.lifetime = json.has("lifetime") ? json.get("lifetime").getAsInt() : defs.getLifetimeOr(60);
         this.antigravity = antigravity;
     }
 
+    /** 伤害类型：damageType 字符串优先；旧 ballType 数字向后兼容转字符串；再回落 defs。 */
+    private static String readDamageType(JsonObject json, StepDefaults defs) {
+        if (json.has("damageType")) return json.get("damageType").getAsString();
+        if (json.has("ballType")) return SpellDamageHelper.fromLegacyInt(json.get("ballType").getAsInt());
+        return defs.damageType();
+    }
+
     @Override
     public void apply(CastContext ctx) {
-        ctx.addProjectile(new SpellProjectile(projectileType, damage, ballType, speed, lifetime, antigravity, 0.0));
+        SpellProjectile p = new SpellProjectile(damage, damageType, speed, lifetime, antigravity, 0.0);
+        p.damageInterval = damageInterval;
+        ctx.addProjectile(p);
     }
 }

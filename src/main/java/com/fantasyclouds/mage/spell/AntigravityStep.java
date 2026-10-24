@@ -5,7 +5,7 @@ import com.google.gson.JsonObject;
 /**
  * 无重力修饰符：把已收集的待发射弹标记为无重力（直线飞行，不受重力下拉）。
  *
- * <p>它是<b>修饰符</b>而非 payload：不定义弹的任何属性（speed/damage/ballType 一律不带），
+ * <p>它是<b>修饰符</b>而非 payload：不定义弹的任何属性（speed/damage/damageType 一律不带），
  * 只改弹的 {@code antigravity} 标记。真正的弹由 {@code projectile} 步骤定义——sequence 里
  * 没有 projectile 步骤时本步骤静默（无弹可改，cast 判定不发射）。
  *

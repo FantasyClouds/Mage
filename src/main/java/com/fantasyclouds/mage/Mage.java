@@ -4,6 +4,7 @@ import com.fantasyclouds.mage.init.MageAttributes;
 import com.fantasyclouds.mage.init.MageEffects;
 import com.fantasyclouds.mage.init.MageEnchantments;
 import com.fantasyclouds.mage.init.MageEntities;
+import com.fantasyclouds.mage.init.MageParticles;
 import com.fantasyclouds.mage.init.MagePotions;
 import com.fantasyclouds.mage.item.MagicCandyItem;
 import com.fantasyclouds.mage.item.ManaItem;
@@ -48,8 +49,16 @@ public class Mage {
     public static final DeferredRegister<Block> BLOCKS = DeferredRegister.create(ForgeRegistries.BLOCKS, MODID);
     public static final DeferredRegister<Item> ITEMS = DeferredRegister.create(ForgeRegistries.ITEMS, MODID);
 
-    /** 测试法杖（施法行为全部由数据包 caster_stats 驱动）。 */
+    /** 测试法杖（施法行为全部由数据包 caster_stats 驱动）。2026-10-22 多根各自测一类新变更：
+     *  test_staff=综合三正交+球形雾；pierce=纯飞行+帧伤；poison=移动毒雾；ground=脚下残留毒雾（贴地投影）；
+     *  effects=五粒子形状；type=六 damageType 字符串。 */
     public static final RegistryObject<Item> TEST_STAFF = ITEMS.register("test_staff", TestStaffItem::new);
+    public static final RegistryObject<Item> TEST_STAFF_PIERCE = ITEMS.register("test_staff_pierce", TestStaffItem::new);
+    public static final RegistryObject<Item> TEST_STAFF_POISON = ITEMS.register("test_staff_poison", TestStaffItem::new);
+    public static final RegistryObject<Item> TEST_STAFF_GROUND = ITEMS.register("test_staff_ground", TestStaffItem::new);
+    public static final RegistryObject<Item> TEST_STAFF_EFFECTS = ITEMS.register("test_staff_effects", TestStaffItem::new);
+    public static final RegistryObject<Item> TEST_STAFF_TYPE = ITEMS.register("test_staff_type", TestStaffItem::new);
+    public static final RegistryObject<Item> TEST_STAFF_EXPLODE = ITEMS.register("test_staff_explode", TestStaffItem::new);
     /** 魔法糖果（迁移自 SOFL）：吃回复 40 Brutality 蓝。 */
     public static final RegistryObject<Item> MAGIC_CANDY = ITEMS.register("magic_candy", MagicCandyItem::new);
     /** 魔力材料（迁移自 SOFL）：法力增幅药水酿造基底。 */
@@ -82,6 +91,7 @@ public class Mage {
         MagePotions.POTIONS.register(modEventBus);
         MageEnchantments.ENCHANTMENTS.register(modEventBus);
         MageEntities.ENTITY_TYPES.register(modEventBus);
+        MageParticles.PARTICLE_TYPES.register(modEventBus);
 
         MinecraftForge.EVENT_BUS.register(this);
 
@@ -94,10 +104,17 @@ public class Mage {
         LOGGER.info("Mage mod common setup");
     }
 
-    /** 把 Mage 物品挂进原版「材料」标签页（不再有独立 Mage 创造标签）。 */
+    /** 把 Mage 物品挂进原版「材料」标签页（不再有独立 Mage 创造标签）。
+     *  2026-10-22 六根测试法杖全量入页，便于游戏内取用验收。 */
     private void addItemsToMaterialTab(final BuildCreativeModeTabContentsEvent event) {
         if (event.getTabKey() == CreativeModeTabs.INGREDIENTS) {
             event.accept(TEST_STAFF.get());
+            event.accept(TEST_STAFF_PIERCE.get());
+            event.accept(TEST_STAFF_POISON.get());
+            event.accept(TEST_STAFF_GROUND.get());
+            event.accept(TEST_STAFF_EFFECTS.get());
+            event.accept(TEST_STAFF_TYPE.get());
+            event.accept(TEST_STAFF_EXPLODE.get());
             event.accept(MAGIC_CANDY.get());
             event.accept(MANA_ITEM.get());
         }
